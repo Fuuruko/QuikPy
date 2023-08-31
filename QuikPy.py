@@ -1,173 +1,183 @@
-from socket import socket, AF_INET, SOCK_STREAM  # Обращаться к LUA скриптам QuikSharp будем через соединения
-from threading import current_thread, Thread  # Результат работы функций обратного вызова будем получать в отдельном потоке
-from json import loads  # Принимать данные в QUIK будем через JSON
-from json.decoder import JSONDecodeError  # Ошибка декодирования JSON
+# Обращаться к LUA скриптам QuikSharp будем через соединения
+from socket import socket, AF_INET, SOCK_STREAM
+# Результат работы функций обратного вызова будем получать в отдельном потоке
+from threading import current_thread, Thread
+# Принимать данные в QUIK будем через JSON
+from json import loads
+# Ошибка декодирования JSON
+from json.decoder import JSONDecodeError
 
 
-# class Singleton(type):
-#     """Метакласс для создания Singleton классов"""
-#     def __init__(cls, *args, **kwargs):
-#         """Инициализация класса"""
-#         super(Singleton, cls).__init__(*args, **kwargs)  # то создаем зкземпляр класса
-#         cls._singleton = None  # Экземпляра класса еще нет
-#
-#     def __call__(cls, *args, **kwargs):
-#         """Вызов класса"""
-#         if cls._singleton is None:  # Если класса нет в экземплярах класса
-#             cls._singleton = super(Singleton, cls).__call__(*args, **kwargs)
-#         return cls._singleton  # Возвращаем экземпляр класса
-#
-#
-# class QuikPy(metaclass=Singleton):  # Singleton класс
 class QuikPy:
-    """Работа с Quik из Python через LUA скрипты QuikSharp https://github.com/finsight/QUIKSharp/tree/master/src/QuikSharp/lua
-     На основе Документации по языку LUA в QUIK из https://arqatech.com/ru/support/files/
-     """
+    """
+    Работа с Quik из Python через LUA скрипты QuikSharp
+    https://github.com/finsight/QUIKSharp/tree/master/src/QuikSharp/lua
+    На основе Документации по языку LUA в QUIK из https://arqatech.com/ru/support/files/
+    """
     buffer_size = 1048576  # Размер буфера приема в байтах (1 МБайт)
     socket_requests = None  # Соединение для запросов
     callback_thread = None  # Поток обработки функций обратного вызова
 
     def DefaultHandler(self, data):
-        """Пустой обработчик события по умолчанию. Его можно заменить на пользовательский"""
+        """
+        Пустой обработчик события по умолчанию.
+        Его можно заменить на пользовательский
+        """
         pass
 
     def callback_handler(self):
         """Поток обработки результатов функций обратного вызова"""
-        callbacks = socket(AF_INET, SOCK_STREAM)  # Соединение для функций обратного вызова
-        callbacks.connect((self.Host, self.CallbacksPort))  # Открываем соединение для функций обратного вызова
+        # Соединение для функций обратного вызова
+        callbacks = socket(AF_INET, SOCK_STREAM)
+        # Открываем соединение для функций обратного вызова
+        callbacks.connect((self.Host, self.CallbacksPort))
         thread = current_thread()  # Получаем текущий поток
-        fragments = []  # Будем получать ответ в виде списка фрагментов. Они могут быть разной длины. Ответ может состоять из нескольких фрагментов
+        # Будем получать ответ в виде списка фрагментов.
+        # Они могут быть разной длины.
+        # Ответ может состоять из нескольких фрагментов
+        fragments = []
         while getattr(thread, 'process', True):  # Пока поток нужен
             while True:  # Пока есть что-то в буфере ответов
-                fragment = callbacks.recv(self.buffer_size)  # Читаем фрагмент из буфера
-                fragments.append(fragment.decode('cp1251'))  # Переводим фрагмент в Windows кодировку 1251, добавляем в список
-                if len(fragment) < self.buffer_size:  # Если в принятом фрагменте данных меньше чем размер буфера
-                    break  # то, возможно, это был последний фрагмент, выходим из чтения буфера
-            data = ''.join(fragments)  # Собираем список фрагментов в строку
-            data_list = data.split('\n')  # Одновременно могут прийти несколько функций обратного вызова, разбираем их по одной
-            fragments = []  # Сбрасываем фрагменты. Если последнюю строку не сможем разобрать, то занесем ее сюда
-            for data in data_list:  # Пробегаемся по всем функциям обратного вызова
-                if data == '':  # Если функция обратного вызова пустая
-                    continue  # то ее не разбираем, переходим на следующую функцию, дальше не продолжаем
-                try:  # Пробуем разобрать функцию обратного вызова
-                    data = loads(data)  # Возвращаем полученный ответ в формате JSON
-                except JSONDecodeError:  # Если разобрать не смогли (пришла не вся строка)
-                    fragments.append(data)  # то, что не разобрали ставим в список фрагментов
-                    break  # т.к. неполной может быть только последняя строка, то выходим из разбора функций обратного выходва
-
+                # Читаем фрагмент из буфера
+                fragment = callbacks.recv(self.buffer_size)
+                # Переводим фрагмент в Windows кодировку 1251, добавляем в список
+                fragments.append(fragment.decode('cp1251'))
+                # Если в принятом фрагменте данных меньше чем размер буфера
+                # то, возможно, это был последний фрагмент, выходим из чтения буфера
+                if len(fragment) < self.buffer_size:
+                    break
+            # Собираем список фрагментов в строку
+            data = ''.join(fragments)
+            # Одновременно могут прийти несколько функций обратного вызова, разбираем их по одной
+            data_list = data.split('\n')
+            # Сбрасываем фрагменты. Если последнюю строку не сможем разобрать, то занесем ее сюда
+            fragments = []
+            # Пробегаемся по всем функциям обратного вызова
+            for data in data_list:
+                # Если функция обратного вызова пустая то ее не разбираем,
+                # переходим на следующую функцию, дальше не продолжаем
+                if data == '':
+                    continue
+                try:
+                    # Пробуем разобрать функцию обратного вызова
+                    # Возвращаем полученный ответ в формате JSON
+                    data = loads(data)
+                # Если разобрать не смогли (пришла не вся строка)
+                # то, что не разобрали ставим в список фрагментов
+                except JSONDecodeError:
+                    fragments.append(data)
+                    # т.к. неполной может быть только последняя строка,
+                    # то выходим из разбора функций обратного выходва
+                    break
                 # Разбираем функцию обратного вызова QUIK LUA
-                if data['cmd'] == 'OnFirm':  # 1. Новая фирма
-                    self.OnFirm(data)
-                elif data['cmd'] == 'OnAllTrade':  # 2. Получение обезличенной сделки
-                    self.OnAllTrade(data)
-                elif data['cmd'] == 'OnTrade':  # 3. Получение новой / изменение существующей сделки
-                    self.OnTrade(data)
-                elif data['cmd'] == 'OnOrder':  # 4. Получение новой / изменение существующей заявки
-                    self.OnOrder(data)
-                elif data['cmd'] == 'OnAccountBalance':  # 5. Изменение позиций по счету
-                    self.OnAccountBalance(data)
-                elif data['cmd'] == 'OnFuturesLimitChange':  # 6. Изменение ограничений по срочному рынку
-                    self.OnFuturesLimitChange(data)
-                elif data['cmd'] == 'OnFuturesLimitDelete':  # 7. Удаление ограничений по срочному рынку
-                    self.OnFuturesLimitDelete(data)
-                elif data['cmd'] == 'OnFuturesClientHolding':  # 8. Изменение позиции по срочному рынку
-                    self.OnFuturesClientHolding(data)
-                elif data['cmd'] == 'OnMoneyLimit':  # 9. Изменение денежной позиции
-                    self.OnMoneyLimit(data)
-                elif data['cmd'] == 'OnMoneyLimitDelete':  # 10. Удаление денежной позиции
-                    self.OnMoneyLimitDelete(data)
-                elif data['cmd'] == 'OnDepoLimit':  # 11. Изменение позиций по инструментам
-                    self.OnDepoLimit(data)
-                elif data['cmd'] == 'OnDepoLimitDelete':  # 12. Удаление позиции по инструментам
-                    self.OnDepoLimitDelete(data)
-                elif data['cmd'] == 'OnAccountPosition':  # 13. Изменение денежных средств
-                    self.OnAccountPosition(data)
-                # OnNegDeal - 14. Получение новой / изменение существующей внебиржевой заявки
-                # OnNegTrade - 15. Получение новой / изменение существующей сделки для исполнения
-                elif data['cmd'] == 'OnStopOrder':  # 16. Получение новой / изменение существующей стоп-заявки
-                    self.OnStopOrder(data)
-                elif data['cmd'] == 'OnTransReply':  # 17. Ответ на транзакцию пользователя
-                    self.OnTransReply(data)
-                elif data['cmd'] == 'OnParam':  # 18. Изменение текущих параметров
-                    self.OnParam(data)
-                elif data['cmd'] == 'OnQuote':  # 19. Изменение стакана котировок
-                    self.OnQuote(data)
-                elif data['cmd'] == 'OnDisconnected':  # 20. Отключение терминала от сервера QUIK
-                    self.OnDisconnected(data)
-                elif data['cmd'] == 'OnConnected':  # 21. Соединение терминала с сервером QUIK
-                    self.OnConnected(data)
-                # OnCleanUp - 22. Смена сервера QUIK / Пользователя / Сессии
-                elif data['cmd'] == 'OnClose':  # 23. Закрытие терминала QUIK
-                    self.OnClose(data)
-                elif data['cmd'] == 'OnStop':  # 24. Остановка LUA скрипта в терминале QUIK / закрытие терминала QUIK
-                    self.OnStop(data)
-                elif data['cmd'] == 'OnInit':  # 25. Запуск LUA скрипта в терминале QUIK
-                    self.OnInit(data)
-                # Разбираем функции обратного вызова QuikSharp
-                elif data['cmd'] == 'NewCandle':  # Получение новой свечки
-                    self.OnNewCandle(data)
-                elif data['cmd'] == 'OnError':  # Получено сообщение об ошибке
-                    self.OnError(data)
+
+                eval(f'self.{data["cmd"]}(data)')
+
         callbacks.close()  # Закрываем соединение для ответов
 
     def process_request(self, request):
         """Отправляем запрос в QUIK, получаем ответ из QUIK"""
         # Issue 13. В QUIK некорректно отображаются русские буквы UTF8
-        raw_data = f'{request}\r\n'.replace("'", '"').encode('cp1251')  # Переводим в кодировку Windows 1251
-        self.socket_requests.sendall(raw_data)  # Отправляем запрос в QUIK
-        fragments = []  # Гораздо быстрее получать ответ в виде списка фрагментов
-        while True:  # Пока фрагменты есть в буфере
-            fragment = self.socket_requests.recv(self.buffer_size)  # Читаем фрагмент из буфера
-            fragments.append(fragment.decode('cp1251'))  # Переводим фрагмент в Windows кодировку 1251, добавляем в список
-            if len(fragment) < self.buffer_size:  # Если в принятом фрагменте данных меньше чем размер буфера
-                data = ''.join(fragments)  # Собираем список фрагментов в строку
-                try:  # Бывает ситуация, когда данных приходит меньше, но это еще не конец данных
-                    return loads(data)  # Попробуем вернуть ответ в формате JSON в Windows кодировке 1251
-                except JSONDecodeError:  # Если это еще не конец данных
-                    pass  # то ждем фрагментов в буфере дальше
+        # Переводим в кодировку Windows 1251
+        raw_data = f'{request}\r\n'.replace("'", '"').encode('cp1251')
+        # Отправляем запрос в QUIK
+        self.socket_requests.sendall(raw_data)
+        # Гораздо быстрее получать ответ в виде списка фрагментов
+        fragments = []
+        # Пока фрагменты есть в буфере
+        while True:
+            # Читаем фрагмент из буфера
+            fragment = self.socket_requests.recv(self.buffer_size)
+            # Переводим фрагмент в Windows кодировку 1251, добавляем в список
+            fragments.append(fragment.decode('cp1251'))
+            # Если в принятом фрагменте данных меньше чем размер буфера
+            if len(fragment) < self.buffer_size:
+                # Собираем список фрагментов в строку
+                data = ''.join(fragments)
+                # Бывает ситуация, когда данных приходит меньше, но это еще не конец данных
+                # Попробуем вернуть ответ в формате JSON в Windows кодировке 1251
+                try:
+                    return loads(data)
+                # Если это еще не конец данных то ждем фрагментов в буфере дальше
+                except JSONDecodeError:
+                    pass
 
     # Инициализация и вход
 
     def __init__(self, host='127.0.0.1', requests_port=34130, callbacks_port=34131):
         """Инициализация"""
-        # 2.2. Функции обратного вызова
-        self.OnFirm = self.DefaultHandler  # 1. Новая фирма
-        self.OnAllTrade = self.DefaultHandler  # 2. Получение обезличенной сделки
-        self.OnTrade = self.DefaultHandler  # 3. Получение новой / изменение существующей сделки
-        self.OnOrder = self.DefaultHandler  # 4. Получение новой / изменение существующей заявки
-        self.OnAccountBalance = self.DefaultHandler  # 5. Изменение позиций
-        self.OnFuturesLimitChange = self.DefaultHandler  # 6. Изменение ограничений по срочному рынку
-        self.OnFuturesLimitDelete = self.DefaultHandler  # 7. Удаление ограничений по срочному рынку
-        self.OnFuturesClientHolding = self.DefaultHandler  # 8. Изменение позиции по срочному рынку
-        self.OnMoneyLimit = self.DefaultHandler  # 9. Изменение денежной позиции
-        self.OnMoneyLimitDelete = self.DefaultHandler  # 10. Удаление денежной позиции
-        self.OnDepoLimit = self.DefaultHandler  # 11. Изменение позиций по инструментам
-        self.OnDepoLimitDelete = self.DefaultHandler  # 12. Удаление позиции по инструментам
-        self.OnAccountPosition = self.DefaultHandler  # 13. Изменение денежных средств
-        # OnNegDeal - 14. Получение новой / изменение существующей внебиржевой заявки
-        # OnNegTrade - 15. Получение новой / изменение существующей сделки для исполнения
-        self.OnStopOrder = self.DefaultHandler  # 16. Получение новой / изменение существующей стоп-заявки
-        self.OnTransReply = self.DefaultHandler  # 17. Ответ на транзакцию пользователя
-        self.OnParam = self.DefaultHandler  # 18. Изменение текущих параметров
-        self.OnQuote = self.DefaultHandler  # 19. Изменение стакана котировок
-        self.OnDisconnected = self.DefaultHandler  # 20. Отключение терминала от сервера QUIK
-        self.OnConnected = self.DefaultHandler  # 21. Соединение терминала с сервером QUIK
-        # OnCleanUp - 22. Смена сервера QUIK / Пользователя / Сессии
-        self.OnClose = self.DefaultHandler  # 23. Закрытие терминала QUIK
-        self.OnStop = self.DefaultHandler  # 24. Остановка LUA скрипта в терминале QUIK / закрытие терминала QUIK
-        self.OnInit = self.DefaultHandler  # 25. Запуск LUA скрипта в терминале QUIK
 
-        # Функции обратного вызова QuikSharp
-        self.OnNewCandle = self.DefaultHandler  # Получение новой свечки
-        self.OnError = self.DefaultHandler  # Получено сообщение об ошибке
+        '''
+        1. Новая фирма
+        2. Получение обезличенной сделки
+        3. Получение новой / изменение существующей сделки
+        4. Получение новой / изменение существующей заявки
+        5. Изменение позиций по счету
+        6. Изменение ограничений по срочному рынку
+        7. Удаление ограничений по срочному рынку
+        8. Изменение позиции по срочному рынку
+        9. Изменение денежной позиции
+        10. Удаление денежной позиции
+        11. Изменение позиций по инструментам
+        12. Удаление позиции по инструментам
+        13. Изменение денежных средств
+        14. Получение новой / изменение существующей стоп-заявки
+        15. Ответ на транзакцию пользователя
+        16. Изменение текущих параметров
+        17. Изменение стакана котировок
+        18. Отключение терминала от сервера QUIK
+        19. Соединение терминала с сервером QUIK
+        20. Закрытие терминала QUIK
+        21. Остановка LUA скрипта в терминале QUIK / закрытие терминала QUIK
+        22. Запуск LUA скрипта в терминале QUIK
+        23. Получение новой свечки
+        24. Сообщение об ошибке
 
-        self.Host = host  # IP адрес или название хоста
-        self.RequestsPort = requests_port  # Порт для отправки запросов и получения ответов
-        self.CallbacksPort = callbacks_port  # Порт для функций обратного вызова
-        self.socket_requests = socket(AF_INET, SOCK_STREAM)  # Создаем соединение для запросов
-        self.socket_requests.connect((self.Host, self.RequestsPort))  # Открываем соединение для запросов
+        Не реализовано
+        OnNegDeal - 25. Получение новой / изменение существующей внебиржевой заявки
+        OnNegTrade - 26. Получение новой / изменение существующей сделки для исполнения
+        OnCleanUp - 27. Смена сервера QUIK / Пользователя / Сессии
+        '''
+        (
+            self.OnFirm,  # 1
+            self.OnAllTrade,  # 2
+            self.OnTrade,  # 3
+            self.OnOrder,  # 4
+            self.OnAccountBalance,  # 5
+            self.OnFuturesLimitChange,  # 6
+            self.OnFuturesLimitDelete,  # 7
+            self.OnFuturesClientHolding,  # 8
+            self.OnMoneyLimit,  # 9
+            self.OnMoneyLimitDelete,  # 10
+            self.OnDepoLimit,  # 11
+            self.OnDepoLimitDelete,  # 12
+            self.OnAccountPosition,  # 13
+            self.OnStopOrder,  # 14
+            self.OnTransReply,  # 15
+            self.OnParam,  # 16
+            self.OnQuote,  # 17
+            self.OnDisconnected,  # 18
+            self.OnConnected,  # 19
+            self.OnClose,  # 20
+            self.OnStop,  # 21
+            self.OnInit,  # 22
+            self.OnNewCandle,  # 23
+            self.OnError,  # 24
+        ) = (self.DefaultHandler,) * 24
 
-        self.callback_thread = Thread(target=self.callback_handler, name='CallbackThread')  # Создаем поток обработки функций обратного вызова
+        # IP адрес или название хоста
+        self.Host = host
+        # Порт для отправки запросов и получения ответов
+        self.RequestsPort = requests_port
+        # Порт для функций обратного вызова
+        self.CallbacksPort = callbacks_port
+        # Создаем соединение для запросов
+        self.socket_requests = socket(AF_INET, SOCK_STREAM)
+        # Открываем соединение для запросов
+        self.socket_requests.connect((self.Host, self.RequestsPort))
+
+        # Создаем поток обработки функций обратного вызова
+        self.callback_thread = Thread(target=self.callback_handler, name='CallbackThread')
         self.callback_thread.start()  # Запускаем поток
 
     def __enter__(self):
@@ -175,7 +185,7 @@ class QuikPy:
         return self
 
     # Фукнции связи с QuikSharp
-    
+
     def Ping(self, trans_id=0):
         """Проверка соединения. Отправка ping. Получение pong"""
         return self.process_request({'data': 'Ping', 'id': trans_id, 'cmd': 'ping', 't': ''})
@@ -224,7 +234,7 @@ class QuikPy:
     # isDarkTheme - 9. Тема оформления. true - тёмная, false - светлая
 
     # Сервисные функции QuikSharp
-    
+
     def MessageInfo(self, message, trans_id=0):  # В QUIK LUA message icon_type=1
         """Отправка информационного сообщения в терминал QUIK"""
         return self.process_request({'data': message, 'id': trans_id, 'cmd': 'message', 't': ''})
@@ -253,7 +263,7 @@ class QuikPy:
     def GetTradeAccount(self, class_code, trans_id=0):
         """Торговый счет для запрашиваемого кода класса"""
         return self.process_request({'data': class_code, 'id': trans_id, 'cmd': 'getTradeAccount', 't': ''})
-        
+
     def GetAllOrders(self, trans_id=0):
         """Таблица заявок (вся)"""
         return self.process_request({'data': f'', 'id': trans_id, 'cmd': 'get_orders', 't': ''})
@@ -335,7 +345,7 @@ class QuikPy:
     def GetClassSecurities(self, class_code, trans_id=0):  # 3
         """Список инструментов класса"""
         return self.process_request({'data': class_code, 'id': trans_id, 'cmd': 'getClassSecurities', 't': ''})
-    
+
     # Функции для обращения к спискам доступных параметров QuikSharp
 
     def GetOptionBoard(self, class_code, sec_code, trans_id=0):
@@ -434,7 +444,8 @@ class QuikPy:
         """Свечки по идентификатору графика"""
         return self.process_request({'data': f'{tag}|{line}|{first_candle}|{count}', 'id': trans_id, 'cmd': 'get_candles', 't': ''})
 
-    def GetCandlesFromDataSource(self, class_code, sec_code, interval, count):  # ichechet - Добавлен выход по таймауту
+    # ichechet - Добавлен выход по таймауту
+    def GetCandlesFromDataSource(self, class_code, sec_code, interval, count):
         """Свечки"""
         return self.process_request({'data': f'{class_code}|{sec_code}|{interval}|{count}', 'id': '1', 'cmd': 'get_candles_from_data_source', 't': ''})
 
@@ -585,11 +596,14 @@ class QuikPy:
     def CloseConnectionAndThread(self):
         """Закрытие соединения для запросов и потока обработки функций обратного вызова"""
         self.socket_requests.close()  # Закрываем соединение для запросов
-        self.callback_thread.process = False  # Поток обработки функций обратного вызова больше не нужен
+        # Поток обработки функций обратного вызова больше не нужен
+        self.callback_thread.process = False
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Выход из класса, например, с with"""
-        self.CloseConnectionAndThread()  # Закрываем соединение для запросов и поток обработки функций обратного вызова
+        # Закрываем соединение для запросов и поток обработки функций обратного вызова
+        self.CloseConnectionAndThread()
 
     def __del__(self):
-        self.CloseConnectionAndThread()  # Закрываем соединение для запросов и поток обработки функций обратного вызова
+        # Закрываем соединение для запросов и поток обработки функций обратного вызова
+        self.CloseConnectionAndThread()

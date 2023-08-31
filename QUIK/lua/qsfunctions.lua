@@ -1009,7 +1009,7 @@ function data_source_callback(index, class, sec, interval)
 
 		local msg = {}
         msg.t = timemsec()
-        msg.cmd = "NewCandle"
+        msg.cmd = "OnNewCandle"
         msg.data = candle
         sendCallback(msg)
 	end
