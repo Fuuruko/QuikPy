@@ -1,130 +1,255 @@
-from QuikPy import QuikPy  # Работа с QUIK из Python через LUA скрипты QuikSharp
+# Для импортирования QuikPy
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parents[2]))
 
+from QuikPy import QuikPy
+from pprint import pprint
 
-def get_all_accounts():
+def get_all_accounts(prov):
     """Получение всех торговых счетов"""
-    futures_firm_id = 'SPBFUT'  # Фирма для фьючерсов. Измените, если требуется, на фирму, которую для фьючерсов поставил ваш брокер
+    # Фирма для фьючерсов. Измените, если требуется,
+    # на фирму, которую для фьючерсов поставил ваш брокер
+    futures_firm_id = 'SPBFUT'
+    """
+    1. Список классов
+    2. Все торговые счета
+    3. Все денежные лимиты (остатки на счетах)
+    4. Все лимиты по бумагам (позиции по инструментам)
+    5. Все заявки
+    6. Все стоп заявки
+    """
+    class_codes = prov.getClassesList()['data']  # 1
+    trade_accounts = prov.getTradeAccounts()['data']  # 2
+    money_limits = prov.getMoneyLimits()['data']  # 3
+    depo_limits = prov.get_depo_limits()['data']  # 4
+    orders = prov.get_orders()['data']  # 5
+    stop_orders = prov.get_stop_orders()['data']  # 6
 
-    class_codes = qp_provider.GetClassesList()['data']  # Список классов
-    class_codes_list = class_codes[:-1].split(',')  # Удаляем последнюю запятую, разбиваем значения по запятой
-    trade_accounts = qp_provider.GetTradeAccounts()['data']  # Все торговые счета
-    money_limits = qp_provider.GetMoneyLimits()['data']  # Все денежные лимиты (остатки на счетах)
-    depo_limits = qp_provider.GetAllDepoLimits()['data']  # Все лимиты по бумагам (позиции по инструментам)
-    orders = qp_provider.GetAllOrders()['data']  # Все заявки
-    stop_orders = qp_provider.GetAllStopOrders()['data']  # Все стоп заявки
+    # Удаляем последнюю запятую, разбиваем значения по запятой
+    class_codes_list = class_codes[:-1].split(',')
 
     # Коды клиента / Фирмы / Счета
-    for trade_account in trade_accounts:  # Пробегаемся по всем счетам
-        firm_id = trade_account['firmid']  # Фирма
-        trade_account_id = trade_account['trdaccid']  # Счет
-        distinct_client_code = list(set([moneyLimit['client_code'] for moneyLimit in money_limits if moneyLimit['firmid'] == firm_id]))  # Уникальные коды клиента по фирме
-        print(f'Код клиента {distinct_client_code[0] if distinct_client_code else "не задан"}, Фирма {firm_id}, Счет {trade_account_id} ({trade_account["description"]})')
-        trade_account_class_codes = trade_account['class_codes'][1:-1].split('|')  # Классы торгового счета. Удаляем последнюю вертикальную черту, разбиваем значения по вертикальной черте
-        intersection_class_codes = list(set(trade_account_class_codes).intersection(class_codes_list))  # Классы, которые есть и в списке и в торговом счете
+    # Пробегаемся по всем счетам
+    for trd_acc in trade_accounts:
+        firm_id = trd_acc['firmid']  # Фирма
+        tr_acc_id = trd_acc['trdaccid']  # Счет
+
+        # Уникальные коды клиента по фирме
+        client_code = set()
+        for moneyLimit in money_limits:
+            if moneyLimit['firmid'] == firm_id:
+                client_code.add(moneyLimit['client_code'])
+        print(f'Код клиента {list(client_code)[0] if client_code else "не задан"}, '
+              f'Фирма {firm_id}, Счет {tr_acc_id} ({trd_acc["description"]})')
+
+        # Классы торгового счета.
+        # Удаляем первую вертикальную черту, разбиваем значения по вертикальной черте
+        trd_acc_cls_codes = trd_acc['class_codes'][1:].split('|')
+
+        # Классы, которые есть и в списке и в торговом счете
+        intersect_cls_codes = list(set(trd_acc_cls_codes).intersection(class_codes_list))
+
         # Классы
-        for class_code in intersection_class_codes:  # Пробегаемся по всем общим классам
-            class_info = qp_provider.GetClassInfo(class_code)['data']  # Информация о классе
-            print(f'- Класс {class_code} ({class_info["name"]}), Тикеров {class_info["nsecs"]}')
-            # Инструменты. Если выводить на экран, то занимают много места. Поэтому, закомментировали
-            # class_securities = qpProvider.GetClassSecurities(classCode)['data'][:-1].split(',')  # Список инструментов класса. Удаляем последнюю запятую, разбиваем значения по запятой
+        for cls_code in intersect_cls_codes:
+            cls_info = prov.getClassInfo(cls_code)['data']  # Информация о классе
+            print(f'- Класс {cls_code} ({cls_info["name"]}), Тикеров {cls_info["nsecs"]}')
+        print()
+            # Инструменты. Если выводить на экран, то занимают много места.
+            # Список инструментов класса. Удаляем последнюю запятую, разбиваем значения по запятой
+            # class_securities = qpProvider.getClassSecurities(classCode)['data'][:-1].split(',')
             # print(f'  - Тикеры ({class_securities})')
-        if firm_id == futures_firm_id:  # Для фьючерсов свои расчеты
+
+        # Для фьючерсов свои расчеты
+        if firm_id == futures_firm_id:
             # Лимиты
-            print(f'- Фьючерсный лимит {qp_provider.GetFuturesLimit(firm_id, trade_account_id, 0, "SUR")["data"]["cbplimit"]} SUR')
+            limits = prov.getFuturesLimit(firm_id, tr_acc_id, 0, "SUR")["data"]
+            print(f'- Фьючерсный лимит {limits["cbplimit"]} SUR')
             # Позиции
-            futures_holdings = qp_provider.GetFuturesHoldings()['data']  # Все фьючерсные позиции
-            active_futures_holdings = [futuresHolding for futuresHolding in futures_holdings if futuresHolding['totalnet'] != 0]  # Активные фьючерсные позиции
-            for active_futures_holding in active_futures_holdings:
-                print(f'  - Фьючерсная позиция {active_futures_holding["sec_code"]} {active_futures_holding["totalnet"]} @ {active_futures_holding["cbplused"]}')
+            futures_holdings = prov.getFuturesClientHoldings()['data']  # Все фьючерсные позиции
+            # Активные фьючерсные позиции
+            active_futures_holdings = []
+            for fut_hold in futures_holdings:
+                if fut_hold['totalnet'] != 0:
+                    active_futures_holdings.append(fut_hold)
+                    print(f'- Фьючерсная позиция {fut_hold["sec_code"]} '
+                          f'{fut_hold["totalnet"]} @ '
+                          f'{fut_hold["cbplused"]}')
+
         else:  # Для остальных фирм
             # Лимиты
-            firm_money_limits = [moneyLimit for moneyLimit in money_limits if moneyLimit['firmid'] == firm_id]  # Денежные лимиты по фирме
-            for firm_money_limit in firm_money_limits:  # Пробегаемся по всем денежным лимитам
-                limit_kind = firm_money_limit['limit_kind']  # День лимита
-                print(f'- Денежный лимит {firm_money_limit["tag"]} на T{limit_kind}: {firm_money_limit["currentbal"]} {firm_money_limit["currcode"]}')
+
+            # Денежные лимиты по фирме
+            firm_money_limits = []
+            for moneyLimit in money_limits:
+                if moneyLimit['firmid'] == firm_id:
+                    firm_money_limits.append(moneyLimit)
+                    limit_kind = moneyLimit['limit_kind']  # День лимита
+                    print(f'- Денежный лимит {moneyLimit["tag"]} на T{limit_kind}: '
+                          f'{moneyLimit["currentbal"]} {moneyLimit["currcode"]}')
+
                 # Позиции
-                firm_kind_depo_limits = [depoLimit for depoLimit in depo_limits if depoLimit['firmid'] == firm_id and depoLimit['limit_kind'] == limit_kind and depoLimit['currentbal'] != 0]  # Берем только открытые позиции по фирме и дню
-                for firm_kind_depo_limit in firm_kind_depo_limits:  # Пробегаемся по всем позициям
-                    sec_code = firm_kind_depo_limit["sec_code"]  # Код тикера
-                    class_code = qp_provider.GetSecurityClass(class_codes, sec_code)['data']
-                    entry_price = float(firm_kind_depo_limit["wa_position_price"])
-                    last_price = float(qp_provider.GetParamEx(class_code, sec_code, 'LAST')['data']['param_value'])  # Последняя цена сделки
-                    if class_code == 'TQOB':  # Для рынка облигаций
-                        last_price *= 10  # Умножаем на 10
-                    print(f'  - Позиция {class_code}.{sec_code} {firm_kind_depo_limit["currentbal"]} @ {entry_price:.2f}/{last_price:.2f}')
+                firm_kind_depo_limits = []
+                for depoLimit in depo_limits:
+                    # Берем только открытые позиции по фирме и дню
+                    if (depoLimit['firmid'] == firm_id
+                            and depoLimit['limit_kind'] == limit_kind
+                            and depoLimit['currentbal'] != 0):
+                        firm_kind_depo_limits.append(depoLimit)
+
+                # Пробегаемся по всем позициям
+                for f_k_d_l in firm_kind_depo_limits:
+                    sec_code = f_k_d_l["sec_code"]  # Код тикера
+                    cls_code = prov.getSecurityClass(class_codes, sec_code)['data']
+                    entry_price = float(f_k_d_l["wa_position_price"])
+                    last_price = float(prov.getParamEx(cls_code, sec_code, 'LAST')[
+                                       'data']['param_value'])  # Последняя цена сделки
+                    if cls_code == 'TQOB':  # Для рынка облигаций
+                        last_price *= 10
+                    print(f'- Позиция {cls_code}.{sec_code} '
+                          f'{f_k_d_l["currentbal"]} @ '
+                          f'{entry_price:.2f}/{last_price:.2f}')
+
         # Заявки
-        firm_orders = [order for order in orders if order['firmid'] == firm_id and order['flags'] & 0b1 == 0b1]  # Активные заявки по фирме
-        for firm_order in firm_orders:  # Пробегаемся по всем заявкам
-            buy = firm_order['flags'] & 0b100 != 0b100  # Заявка на покупку
-            print(f'- Заявка номер {firm_order["order_num"]} {"Покупка" if buy else "Продажа"} {firm_order["class_code"]}.{firm_order["sec_code"]} {firm_order["qty"]} @ {firm_order["price"]}')
+        print()
+        firm_orders = []
+        for order in orders:
+            # Активные заявки по фирме
+            # TODO: Необходимость (order['flags'] & 0b1 == 0b1)?
+            if order['firmid'] == firm_id and order['flags'] & 0b1 == 0b1:
+                firm_orders.append(order)
+                # Заявка на покупку
+                buy = order['flags'] & 0b100 != 0b100
+                print(f'- Заявка номер {order["order_num"]} '
+                      f'{"Покупка" if buy else "Продажа"} '
+                      f'{order["class_code"]}.{order["sec_code"]} '
+                      f'{order["qty"]} @ {order["price"]}')
+        print()
         # Стоп заявки
-        firm_stop_orders = [stopOrder for stopOrder in stop_orders if stopOrder['firmid'] == firm_id and stopOrder['flags'] & 0b1 == 0b1]  # Активные стоп заявки по фирме
-        for firm_stop_order in firm_stop_orders:  # Пробегаемся по всем стоп заявкам
-            buy = firm_stop_order['flags'] & 0b100 != 0b100  # Заявка на покупку
-            print(f'- Стоп заявка номер {firm_stop_order["order_num"]} {"Покупка" if buy else "Продажа"} {firm_stop_order["class_code"]}.{firm_stop_order["sec_code"]} {firm_stop_order["qty"]} @ {firm_stop_order["price"]}')
+        firm_stop_orders = []
+        for stopOrder in stop_orders:
+            # Активные стоп заявки по фирме
+            # TODO: Необходимость (order['flags'] & 0b1 == 0b1)?
+            if stopOrder['firmid'] == firm_id and stopOrder['flags'] & 0b1 == 0b1:
+                firm_stop_orders.append(stopOrder)
+                # Заявка на покупку
+                buy = stopOrder['flags'] & 0b100 != 0b100
+                print(f'- Стоп заявка номер {stopOrder["order_num"]} '
+                      f'{"Покупка" if buy else "Продажа"} '
+                      f'{stopOrder["class_code"]}.{stopOrder["sec_code"]} '
+                      f'{stopOrder["qty"]} @ {stopOrder["price"]}')
+        print()
 
 
-def get_account(client_code='', firm_id='SPBFUT', trade_account_id='SPBFUT00PST', limit_kind=0, currency_code='SUR', futures=True):
+def get_account(prov, client_code='', firm_id='SPBFUT', trd_acc_id='SPBFUT00PST',
+                limit_kind=0, currency_code='SUR', futures=True):
     """Получение торгового счета. По умолчанию выдается счет срочного рынка"""
-    class_codes = qp_provider.GetClassesList()['data']  # Список классов
-    money_limits = qp_provider.GetMoneyLimits()['data']  # Все денежные лимиты (остатки на счетах)
-    depo_limits = qp_provider.GetAllDepoLimits()['data']  # Все лимиты по бумагам (позиции по инструментам)
-    orders = qp_provider.GetAllOrders()['data']  # Все заявки
-    stop_orders = qp_provider.GetAllStopOrders()['data']  # Все стоп заявки
+    class_codes = prov.getClassesList()['data']  # Список классов
+    money_limits = prov.getMoneyLimits()['data']  # Все денежные лимиты (остатки на счетах)
 
-    print(f'Код клиента {client_code}, Фирма {firm_id}, Счет {trade_account_id}, T{limit_kind}, {currency_code}')
+    # Все лимиты по бумагам (позиции по инструментам)
+    depo_limits = prov.get_depo_limits()['data']
+    orders = prov.get_orders()['data']  # Все заявки
+    stop_orders = prov.get_stop_orders()['data']  # Все стоп заявки
+
+    print(f'Код клиента {client_code}, Фирма {firm_id}, '
+          f'Счет {trd_acc_id}, T{limit_kind}, {currency_code}')
+
     if futures:  # Для фьючерсов свои расчеты
-        print(f'- Фьючерсный лимит {qp_provider.GetFuturesLimit(firm_id, trade_account_id, 0, "SUR")["data"]["cbplimit"]} SUR')
-        futures_holdings = qp_provider.GetFuturesHoldings()['data']  # Все фьючерсные позиции
-        active_futures_holdings = [futuresHolding for futuresHolding in futures_holdings if futuresHolding['totalnet'] != 0]  # Активные фьючерсные позиции
-        for active_futures_holding in active_futures_holdings:
-            print(f'- Фьючерсная позиция {active_futures_holding["sec_code"]} {active_futures_holding["totalnet"]} @ {active_futures_holding["cbplused"]}')
+        # input(prov.getFuturesLimit('SPBFUT589000', trd_acc_id, 0, "SUR"))
+        fut_limits = prov.getFuturesLimit(firm_id, trd_acc_id, 0, "SUR")["data"]["cbplimit"]
+        print(
+            f'- Фьючерсный лимит {prov.getFuturesLimit(firm_id, trd_acc_id, 0, "SUR")["data"]["cbplimit"]} SUR')
+        futures_holdings = prov.getFuturesClientHoldings()['data']  # Все фьючерсные позиции
+
+        # Активные фьючерсные позиции
+        active_futures_holdings = []
+        for fut_hold in futures_holdings:
+            if fut_hold['totalnet'] != 0:
+                active_futures_holdings.append(fut_hold)
+                print(f'- Фьючерсная позиция {fut_hold["sec_code"]} '
+                      f'{fut_hold["totalnet"]} @ {fut_hold["cbplused"]}')
+
     else:  # Для остальных фирм
-        account_money_limit = [money_limit for money_limit in money_limits  # Денежный лимит
-                               if money_limit['client_code'] == client_code and  # Выбираем по коду клиента
-                               money_limit['firmid'] == firm_id and  # Фирме
-                               money_limit['limit_kind'] == limit_kind and  # Дню лимита
-                               money_limit["currcode"] == currency_code][0]  # Валюте
-        print(f'- Денежный лимит {account_money_limit["currentbal"]}')
-        account_depo_limits = [depo_limit for depo_limit in depo_limits  # Бумажный лимит
-                               if depo_limit['client_code'] == client_code and  # Выбираем по коду клиента
-                               depo_limit['firmid'] == firm_id and  # Фирме
-                               depo_limit['limit_kind'] == limit_kind and  # Дню лимита
-                               depo_limit['currentbal'] != 0]  # Берем только открытые позиции по фирме и дню
-        for firm_kind_depo_limit in account_depo_limits:  # Пробегаемся по всем позициям
+        acc_money_limit = []
+        for money_limit in money_limits:
+            # Берем только открытые позиции по фирме и дню
+            if (money_limit['client_code'] == client_code  # Выбираем по коду клиента
+                    and money_limit['firmid'] == firm_id  # Фирме
+                    and money_limit['limit_kind'] == limit_kind  # Дню лимита
+                    and money_limit["currcode"] == currency_code):  # Валюте
+                acc_money_limit.append(money_limit)
+
+        acc_money_limit = acc_money_limit[0]
+        print(f'- Денежный лимит {acc_money_limit["currentbal"]}')
+
+        acc_depo_limits = []
+        for depo_limit in depo_limits:
+            # Берем только открытые позиции по фирме и дню
+            if (depo_limit['client_code'] == client_code  # Выбираем по коду клиента
+                    and depo_limit['firmid'] == firm_id  # Фирме
+                    and depo_limit['limit_kind'] == limit_kind  # Дню лимита
+                    and depo_limit["currentbal"] == 0):  # Берем только открытые позиции по фирме и дню
+                acc_depo_limits.append(depo_limit)
+
+        for firm_kind_depo_limit in acc_depo_limits:  # Пробегаемся по всем позициям
             sec_code = firm_kind_depo_limit["sec_code"]  # Код тикера
             entry_price = float(firm_kind_depo_limit["wa_position_price"])
-            class_code = qp_provider.GetSecurityClass(class_codes, sec_code)['data']
-            last_price = float(qp_provider.GetParamEx(class_code, sec_code, 'LAST')['data']['param_value'])  # Последняя цена сделки
+            class_code = prov.getSecurityClass(class_codes, sec_code)['data']
+            last_price = float(prov.getParamEx(class_code, sec_code, 'LAST')[
+                               'data']['param_value'])  # Последняя цена сделки
             if class_code == 'TQOB':  # Для рынка облигаций
-                last_price *= 10  # Умножаем на 10
-            print(f'- Позиция {class_code}.{sec_code} {firm_kind_depo_limit["currentbal"]} @ {entry_price:.2f}/{last_price:.2f}')
-    account_orders = [order for order in orders  # Заявки
-                      if (order['client_code'] == client_code or client_code == '') and  # Выбираем по коду клиента
-                      order['firmid'] == firm_id and  # Фирме
-                      order['account'] == trade_account_id and  # Счету
-                      order['flags'] & 0b1 == 0b1]  # Активные заявки
-    for account_order in account_orders:  # Пробегаемся по всем заявкам
-        buy = account_order['flags'] & 0b100 != 0b100  # Заявка на покупку
-        print(f'- Заявка номер {account_order["order_num"]} {"Покупка" if buy else "Продажа"} {account_order["class_code"]}.{account_order["sec_code"]} {account_order["qty"]} @ {account_order["price"]}')
-    account_stop_orders = [stop_order for stop_order in stop_orders  # Стоп заявки
-                           if (stop_order['client_code'] == client_code or client_code == '') and  # Выбираем по коду клиента
-                           stop_order['firmid'] == firm_id and  # Фирме
-                           stop_order['account'] == trade_account_id and  # Счету
-                           stop_order['flags'] & 0b1 == 0b1]  # Активные стоп заявки
-    for account_stop_order in account_stop_orders:  # Пробегаемся по всем стоп заявкам
-        buy = account_stop_order['flags'] & 0b100 != 0b100  # Заявка на покупку
-        print(f'- Стоп заявка номер {account_stop_order["order_num"]} {"Покупка" if buy else "Продажа"} {account_stop_order["class_code"]}.{account_stop_order["sec_code"]} {account_stop_order["qty"]} @ {account_stop_order["price"]}')
+                last_price *= 10
+
+            print(f'- Позиция {class_code}.{sec_code} '
+                  f'{firm_kind_depo_limit["currentbal"]} '
+                  f'@ {entry_price:.2f}/{last_price:.2f}')
+    print()
+    acc_orders = []
+    for order in orders:
+        # Берем только открытые позиции по фирме и дню
+        if ((order['client_code'] == client_code or client_code == '')  # Выбираем по коду клиента
+                and order['firmid'] == firm_id  # Фирме
+                and order['account'] == trd_acc_id  # Дню лимита
+                and order['flags'] & 0b1 == 0b1):  # Валюте
+            acc_orders.append(order)
+            # Заявка на покупку
+            buy = order['flags'] & 0b100 != 0b100
+            print(f'- Заявка номер {order["order_num"]} '
+                  f'{"Покупка" if buy else "Продажа"} '
+                  f'{order["class_code"]}.{order["sec_code"]} '
+                  f'{order["qty"]} @ {order["price"]}')
+
+    print()
+    acc_stop_orders = []
+    for stop_order in stop_orders:
+        # Берем только открытые позиции по фирме и дню
+        if ((stop_order['client_code'] == client_code or client_code == '')  # Выбираем по коду клиента
+                and stop_order['firmid'] == firm_id  # Фирме
+                and stop_order['account'] == trd_acc_id  # Счету
+                and stop_order['flags'] & 0b1 == 0b1):  # Активные стоп заявки
+            acc_stop_orders.append(order)
+            # Заявка на покупку
+            buy = order['flags'] & 0b100 != 0b100
+            print(f'- Стоп заявка номер {order["order_num"]} '
+                  f'{"Покупка" if buy else "Продажа"} '
+                  f'{order["class_code"]}.{order["sec_code"]} '
+                  f'{order["qty"]} @ {order["price"]}')
+    print()
 
 
 if __name__ == '__main__':  # Точка входа при запуске этого скрипта
     qp_provider = QuikPy()  # Подключение к локальному запущенному терминалу QUIK
 
-    get_all_accounts()  # Получаем все счета. По ним можно будет сформировать список счетов для торговли
+    # Получаем все счета. По ним можно будет сформировать список счетов для торговли
+    get_all_accounts(qp_provider)
     print()
-    get_account()  # Российские фьючерсы и опционы (счет по умолчанию)
+    # Российские фьючерсы и опционы (счет по умолчанию)
+    get_account(qp_provider, firm_id='SPBFUT589000',trd_acc_id='SPBFUTK5GUE')
     # По списку полученных счетов обязательно проверьте каждый!
-    # get_account('<Код клиента>', '<Код фирмы>', '<Счет>', <Номер дня лимита>, '<Валюта>', <Счет фьючерсов=True, иначе=False>)
+    # get_account('<Код клиента>', '<Код фирмы>', '<Счет>',
+    #             <Номер дня лимита> , '<Валюта>',
+    #             <Счет фьючерсов=True, иначе=False>)
 
     # Выход
     qp_provider.CloseConnectionAndThread()  # Перед выходом закрываем соединение и поток QuikPy

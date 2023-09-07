@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parents[2]))
+
 from QuikPy import QuikPy  # Работа с QUIK из Python через LUA скрипты QuikSharp
 
 
@@ -63,10 +67,12 @@ if __name__ == '__main__':  # Точка входа при запуске это
     #     'CLASSCODE': class_code,  # Код площадки
     #     'SECCODE': sec_code,  # Код тикера
     #     'OPERATION': 'S',  # B = покупка, S = продажа
-    #     'PRICE': str(price),  # Цена исполнения. Для рыночных фьючерсных заявок наихудшая цена в зависимости от направления. Для остальных рыночных заявок цена = 0
+    #      Цена исполнения. Для рыночных фьючерсных заявок наихудшая цена в зависимости от направления.
+    #      Для остальных рыночных заявок цена = 0
+    #     'PRICE': str(price),  
     #     'QUANTITY': str(quantity),  # Кол-во в лотах
     #     'TYPE': 'L'}  # L = лимитная заявка (по умолчанию), M = рыночная заявка
-    # print(f'Новая лимитная/рыночная заявка отправлена на рынок: {qp_provider.SendTransaction(transaction)["data"]}')
+    # print(f'Новая лимитная/рыночная заявка отправлена на рынок: {qp_provider.sendTransaction(transaction)["data"]}')
 
     # Удаление существующей лимитной заявки
     # orderNum = 1234567890123456789  # 19-и значный номер заявки
@@ -76,11 +82,12 @@ if __name__ == '__main__':  # Точка входа при запуске это
     #     'CLASSCODE': class_code,  # Код площадки
     #     'SECCODE': sec_code,  # Код тикера
     #     'ORDER_KEY': str(orderNum)}  # Номер заявки
-    # print(f'Удаление заявки отправлено на рынок: {qp_provider.SendTransaction(transaction)["data"]}')
+    # print(f'Удаление заявки отправлено на рынок: {qp_provider.sendTransaction(transaction)["data"]}')
+
 
     # Новая стоп заявка
     StopSteps = 10  # Размер проскальзывания в шагах цены
-    slippage = float(qp_provider.GetSecurityInfo(class_code, sec_code)['data']['min_price_step']) * StopSteps  # Размер проскальзывания в деньгах
+    slippage = float(qp_provider.getSecurityInfo(class_code, sec_code)['data']['min_price_step']) * StopSteps  # Размер проскальзывания в деньгах
     if slippage.is_integer():  # Целое значение проскальзывания мы должны отправлять без десятичных знаков
         slippage = int(slippage)  # поэтому, приводим такое проскальзывание к целому числу
     transaction = {  # Все значения должны передаваться в виде строк
@@ -95,7 +102,7 @@ if __name__ == '__main__':  # Точка входа при запуске это
         'QUANTITY': str(quantity),  # Кол-во в лотах
         'STOPPRICE': str(price + slippage),  # Стоп цена исполнения
         'EXPIRY_DATE': 'GTC'}  # Срок действия до отмены
-    print(f'Новая стоп заявка отправлена на рынок: {qp_provider.SendTransaction(transaction)["data"]}')
+    print(f'Новая стоп заявка отправлена на рынок: {qp_provider.sendTransaction(transaction)["data"]}')
 
     # Удаление существующей стоп заявки
     # orderNum = 1234567  # Номер заявки
@@ -105,7 +112,7 @@ if __name__ == '__main__':  # Точка входа при запуске это
     #     'CLASSCODE': class_code,  # Код площадки
     #     'SECCODE': sec_code,  # Код тикера
     #     'STOP_ORDER_KEY': str(orderNum)}  # Номер заявки
-    # print(f'Удаление стоп заявки отправлено на рынок: {qp_provider.SendTransaction(transaction)["data"]}')
+    # print(f'Удаление стоп заявки отправлено на рынок: {qp_provider.sendTransaction(transaction)["data"]}')
 
     input('Enter - отмена\n')  # Ждем исполнение заявки
     qp_provider.CloseConnectionAndThread()  # Перед выходом закрываем соединение и поток QuikPy

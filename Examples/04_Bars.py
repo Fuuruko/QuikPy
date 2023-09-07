@@ -2,6 +2,11 @@ from time import time
 import os.path
 
 import pandas as pd
+
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parents[2]))
+
 from QuikPy import QuikPy  # Работа с QUIK из Python через LUA скрипты QuikSharp
 
 
@@ -39,7 +44,7 @@ def save_candles_to_file(class_code='TQBR', sec_codes=('SBER',), time_frame='D',
         else:  # Файл не существует
             print(f'Файл {file_name} не найден и будет создан')
         print(f'Получение истории {class_code}.{sec_code} {time_frame}{compression} из QUIK')
-        new_bars = qp_provider.GetCandlesFromDataSource(class_code, sec_code, interval, 0)['data']  # Получаем все бары из QUIK
+        new_bars = qp_provider.get_candles_from_data_source(class_code, sec_code, interval, 0)['data']  # Получаем все бары из QUIK
         pd_bars = pd.json_normalize(new_bars)  # Переводим список баров в pandas DataFrame
         pd_bars.rename(columns={'datetime.year': 'year', 'datetime.month': 'month', 'datetime.day': 'day',
                                 'datetime.hour': 'hour', 'datetime.min': 'minute', 'datetime.sec': 'second'},

@@ -3,9 +3,10 @@ from socket import socket, AF_INET, SOCK_STREAM
 # Результат работы функций обратного вызова будем получать в отдельном потоке
 from threading import current_thread, Thread
 # Принимать данные в QUIK будем через JSON
-from json import loads
+from json import loads as json_loads
 # Ошибка декодирования JSON
 from json.decoder import JSONDecodeError
+from sys import _getframe
 
 
 class QuikPy:
@@ -14,9 +15,17 @@ class QuikPy:
     https://github.com/finsight/QUIKSharp/tree/master/src/QuikSharp/lua
     На основе Документации по языку LUA в QUIK из https://arqatech.com/ru/support/files/
     """
-    buffer_size = 1048576  # Размер буфера приема в байтах (1 МБайт)
-    socket_requests = None  # Соединение для запросов
+    BUFFER_SIZE = 1048576  # Размер буфера приема в байтах (1 МБайт)
+    socket_req = None  # Соединение для запросов
     callback_thread = None  # Поток обработки функций обратного вызова
+
+    @staticmethod
+    def get_cmd():
+        '''
+        Возращает имя ф-ции вызывающей process_request
+        Имя ф-ции является коммандой вызываемой в Lua
+        '''
+        return _getframe(2).f_code.co_name
 
     def DefaultHandler(self, data):
         """
@@ -27,82 +36,73 @@ class QuikPy:
 
     def callback_handler(self):
         """Поток обработки результатов функций обратного вызова"""
-        # Соединение для функций обратного вызова
-        callbacks = socket(AF_INET, SOCK_STREAM)
-        # Открываем соединение для функций обратного вызова
-        callbacks.connect((self.Host, self.CallbacksPort))
-        thread = current_thread()  # Получаем текущий поток
-        # Будем получать ответ в виде списка фрагментов.
-        # Они могут быть разной длины.
-        # Ответ может состоять из нескольких фрагментов
+        thread = current_thread()
         fragments = []
-        while getattr(thread, 'process', True):  # Пока поток нужен
+        while getattr(thread, 'process', True):
             while True:  # Пока есть что-то в буфере ответов
-                # Читаем фрагмент из буфера
-                fragment = callbacks.recv(self.buffer_size)
-                # Переводим фрагмент в Windows кодировку 1251, добавляем в список
+                fragment = self.callbacks.recv(self.BUFFER_SIZE)
+                # Декодирование из Windows-1251
                 fragments.append(fragment.decode('cp1251'))
                 # Если в принятом фрагменте данных меньше чем размер буфера
                 # то, возможно, это был последний фрагмент, выходим из чтения буфера
-                if len(fragment) < self.buffer_size:
+                if len(fragment) < self.BUFFER_SIZE:
                     break
-            # Собираем список фрагментов в строку
             data = ''.join(fragments)
             # Одновременно могут прийти несколько функций обратного вызова, разбираем их по одной
             data_list = data.split('\n')
-            # Сбрасываем фрагменты. Если последнюю строку не сможем разобрать, то занесем ее сюда
+            # Если последнюю строку не сможем разобрать, то занесем ее сюда
             fragments = []
             # Пробегаемся по всем функциям обратного вызова
             for data in data_list:
-                # Если функция обратного вызова пустая то ее не разбираем,
-                # переходим на следующую функцию, дальше не продолжаем
-                if data == '':
+                if not data:
                     continue
                 try:
-                    # Пробуем разобрать функцию обратного вызова
-                    # Возвращаем полученный ответ в формате JSON
-                    data = loads(data)
+                    # Преобразуем в формате JSON
+                    # TODO: Необходимость преобразования в json
+                    data = json_loads(data)
                 # Если разобрать не смогли (пришла не вся строка)
-                # то, что не разобрали ставим в список фрагментов
                 except JSONDecodeError:
                     fragments.append(data)
-                    # т.к. неполной может быть только последняя строка,
+                    # Т.к. неполной может быть только последняя строка,
                     # то выходим из разбора функций обратного выходва
                     break
-                # Разбираем функцию обратного вызова QUIK LUA
 
                 eval(f'self.{data["cmd"]}(data)')
 
-        callbacks.close()  # Закрываем соединение для ответов
+        self.callbacks.close()
 
-    def process_request(self, request):
+    def process_request(self, trans_id, *data_args):
         """Отправляем запрос в QUIK, получаем ответ из QUIK"""
+        data_args = [str(arg) for arg in data_args if arg != '']
+        data_args = '|'.join(data_args) if data_args else ''
+        request = {'data': data_args,
+                   'cmd': self.get_cmd(),
+                   'id': trans_id,
+                   't': ''}
         # Issue 13. В QUIK некорректно отображаются русские буквы UTF8
         # Переводим в кодировку Windows 1251
         raw_data = f'{request}\r\n'.replace("'", '"').encode('cp1251')
+
         # Отправляем запрос в QUIK
-        self.socket_requests.sendall(raw_data)
-        # Гораздо быстрее получать ответ в виде списка фрагментов
+        self.socket_req.sendall(raw_data)
+
         fragments = []
         # Пока фрагменты есть в буфере
         while True:
-            # Читаем фрагмент из буфера
-            fragment = self.socket_requests.recv(self.buffer_size)
-            # Переводим фрагмент в Windows кодировку 1251, добавляем в список
+            fragment = self.socket_req.recv(self.BUFFER_SIZE)
             fragments.append(fragment.decode('cp1251'))
-            # Если в принятом фрагменте данных меньше чем размер буфера
-            if len(fragment) < self.buffer_size:
-                # Собираем список фрагментов в строку
+            if len(fragment) < self.BUFFER_SIZE:
                 data = ''.join(fragments)
-                # Бывает ситуация, когда данных приходит меньше, но это еще не конец данных
-                # Попробуем вернуть ответ в формате JSON в Windows кодировке 1251
                 try:
-                    return loads(data)
+                    # Преобразуем в формате JSON
+                    # Т.к. остальные параметры нигде не используются
+                    # TODO : return json_loads(data).data
+                    return json_loads(data)
+                # Бывает ситуация, когда данных приходит меньше, но это еще не конец данных
                 # Если это еще не конец данных то ждем фрагментов в буфере дальше
                 except JSONDecodeError:
+                    print('JSONDecodeError process_request')
                     pass
-
-    # Инициализация и вход
 
     def __init__(self, host='127.0.0.1', requests_port=34130, callbacks_port=34131):
         """Инициализация"""
@@ -138,6 +138,7 @@ class QuikPy:
         OnNegTrade - 26. Получение новой / изменение существующей сделки для исполнения
         OnCleanUp - 27. Смена сервера QUIK / Пользователя / Сессии
         '''
+
         (
             self.OnFirm,  # 1
             self.OnAllTrade,  # 2
@@ -165,20 +166,22 @@ class QuikPy:
             self.OnError,  # 24
         ) = (self.DefaultHandler,) * 24
 
-        # IP адрес или название хоста
-        self.Host = host
-        # Порт для отправки запросов и получения ответов
-        self.RequestsPort = requests_port
-        # Порт для функций обратного вызова
-        self.CallbacksPort = callbacks_port
-        # Создаем соединение для запросов
-        self.socket_requests = socket(AF_INET, SOCK_STREAM)
-        # Открываем соединение для запросов
-        self.socket_requests.connect((self.Host, self.RequestsPort))
-
-        # Создаем поток обработки функций обратного вызова
         self.callback_thread = Thread(target=self.callback_handler, name='CallbackThread')
-        self.callback_thread.start()  # Запускаем поток
+
+        # IP адрес или название хоста
+        # Порт для отправки запросов и получения ответов
+        # Порт для функций обратного вызова
+        self.host = host
+        self.req_port = requests_port
+        self.cb_port = callbacks_port
+
+        self.socket_req = socket(AF_INET, SOCK_STREAM)
+        self.callbacks = socket(AF_INET, SOCK_STREAM)
+
+        self.socket_req.connect((self.host, self.req_port))
+        self.callbacks.connect((self.host, self.cb_port))
+
+        self.callback_thread.start()
 
     def __enter__(self):
         """Вход в класс, например, с with"""
@@ -186,231 +189,216 @@ class QuikPy:
 
     # Фукнции связи с QuikSharp
 
-    def Ping(self, trans_id=0):
+    def ping(self, trans_id=0):
         """Проверка соединения. Отправка ping. Получение pong"""
-        return self.process_request({'data': 'Ping', 'id': trans_id, 'cmd': 'ping', 't': ''})
+        return self.process_request(trans_id, 'Ping')
 
-    def Echo(self, message, trans_id=0):
+    def echo(self, message, trans_id=0):
         """Эхо. Отправка и получение одного и того же сообщения"""
-        return self.process_request({'data': message, 'id': trans_id, 'cmd': 'echo', 't': ''})
+        return self.process_request(trans_id, message)
 
-    def DivideStringByZero(self, trans_id=0):
+    def divide_string_by_zero(self, trans_id=0):
         """Тест обработки ошибок. Выполняется деление на 0 с выдачей ошибки"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'divide_string_by_zero', 't': ''})
+        return self.process_request(trans_id)
 
-    def IsQuik(self, trans_id=0):
+    def is_quik(self, trans_id=0):
         """Скрипт запущен в Квике"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'is_quik', 't': ''})
+        return self.process_request(trans_id)
 
     # 2.1 Сервисные функции
 
-    def IsConnected(self, trans_id=0):  # 1
-        """Состояние подключения терминала к серверу QUIK. Возвращает 1 - подключено / 0 - не подключено"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'isConnected', 't': ''})
+    def isConnected(self, trans_id=0):  # 1
+        """
+        Состояние подключения терминала к серверу QUIK.
+        Возвращает 1 - подключено / 0 - не подключено
+        """
+        return self.process_request(trans_id)
 
-    def GetScriptPath(self, trans_id=0):  # 2
+    def getScriptPath(self, trans_id=0):  # 2
         """Путь скрипта без завершающего обратного слэша"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'getScriptPath', 't': ''})
+        return self.process_request(trans_id)
 
-    def GetInfoParam(self, params, trans_id=0):  # 3
+    def getInfoParam(self, params, trans_id=0):  # 3
         """Значения параметров информационного окна"""
-        return self.process_request({'data': params, 'id': trans_id, 'cmd': 'getInfoParam', 't': ''})
+        return self.process_request(trans_id, params)
 
     # message - 4. Сообщение в терминале QUIK. Реализовано в виде 3-х отдельных функций в QuikSharp
 
-    def Sleep(self, time, trans_id=0):  # 5
+    def sleep(self, time, trans_id=0):  # 5
         """Приостановка скрипта. Время в миллисекундах"""
-        return self.process_request({'data': time, 'id': trans_id, 'cmd': 'sleep', 't': ''})
+        return self.process_request(trans_id, time)
 
-    def GetWorkingFolder(self, trans_id=0):  # 6
+    def getWorkingFolder(self, trans_id=0):  # 6
         """Путь к info.exe, исполняющего скрипт без завершающего обратного слэша"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'getWorkingFolder', 't': ''})
+        return self.process_request(trans_id)
 
     def PrintDbgStr(self, message, trans_id=0):  # 7
         """Вывод отладочной информации. Можно посмотреть с помощью DebugView"""
-        return self.process_request({'data': message, 'id': trans_id, 'cmd': 'PrintDbgStr', 't': ''})
+        return self.process_request(trans_id, message)
 
     # sysdate - 8. Системные дата и время
     # isDarkTheme - 9. Тема оформления. true - тёмная, false - светлая
 
     # Сервисные функции QuikSharp
 
-    def MessageInfo(self, message, trans_id=0):  # В QUIK LUA message icon_type=1
+    def message(self, message, trans_id=0):  # В QUIK LUA message icon_type=1
         """Отправка информационного сообщения в терминал QUIK"""
-        return self.process_request({'data': message, 'id': trans_id, 'cmd': 'message', 't': ''})
+        return self.process_request(trans_id, message)
 
-    def MessageWarning(self, message, trans_id=0):  # В QUIK LUA message icon_type=2
+    def warning_message(self, message, trans_id=0):  # В QUIK LUA message icon_type=2
         """Отправка сообщения с предупреждением в терминал QUIK"""
-        return self.process_request({'data': message, 'id': trans_id, 'cmd': 'warning_message', 't': ''})
+        return self.process_request(trans_id, message)
 
-    def MessageError(self, message, trans_id=0):  # В QUIK LUA message icon_type=3
+    def error_message(self, message, trans_id=0):  # В QUIK LUA message icon_type=3
         """Отправка сообщения об ошибке в терминал QUIK"""
-        return self.process_request({'data': message, 'id': trans_id, 'cmd': 'error_message', 't': ''})
+        return self.process_request(trans_id, message)
 
     # 3.1. Функции для обращения к строкам произвольных таблиц
 
+    '''
     # getItem - 1. Строка таблицы
     # getOrderByNumber - 2. Заявка
     # getNumberOf - 3. Кол-во записей в таблице
     # SearchItems - 4. Быстрый поиск по таблице заданной функцией поиска
+    '''
 
     # Функции для обращения к строкам произвольных таблиц QuikSharp
 
-    def GetTradeAccounts(self, trans_id=0):
+    def getTradeAccounts(self, trans_id=0):
         """Торговые счета, у которых указаны поддерживаемые классы инструментов"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'getTradeAccounts', 't': ''})
+        return self.process_request(trans_id)
 
-    def GetTradeAccount(self, class_code, trans_id=0):
+    def getTradeAccount(self, class_code, trans_id=0):
         """Торговый счет для запрашиваемого кода класса"""
-        return self.process_request({'data': class_code, 'id': trans_id, 'cmd': 'getTradeAccount', 't': ''})
+        return self.process_request(trans_id, class_code)
 
-    def GetAllOrders(self, trans_id=0):
-        """Таблица заявок (вся)"""
-        return self.process_request({'data': f'', 'id': trans_id, 'cmd': 'get_orders', 't': ''})
+    def get_orders(self, class_code='', sec_code='', trans_id=0):
+        """Таблица заявок (вся) / (по инструменту(оба кода должны присутствовать))"""
+        return self.process_request(trans_id, class_code, sec_code)
 
-    def GetOrders(self, class_code, sec_code, trans_id=0):
-        """Таблица заявок (по инструменту)"""
-        return self.process_request({'data': f'{class_code}|{sec_code}', 'id': trans_id, 'cmd': 'get_orders', 't': ''})
-
-    def GetOrderByNumber(self, order_id, trans_id=0):
+    def getOrder_by_Number(self, order_id, trans_id=0):
         """Заявка по номеру"""
-        return self.process_request({'data': order_id, 'id': trans_id, 'cmd': 'getOrder_by_Number', 't': ''})
+        return self.process_request(trans_id, order_id)
 
-    def GetOrderById(self, class_code, sec_code, order_trans_id, trans_id=0):
-        """Заявка по инструменту и Id транзакции"""
-        return self.process_request({'data': f'{class_code}|{sec_code}|{order_trans_id}', 'id': trans_id, 'cmd': 'getOrder_by_ID', 't': ''})
-
-    def GetOrderByClassNumber(self, class_code, order_id, trans_id=0):
+    def get_order_by_number(self, class_code, order_id, trans_id=0):
         """Заявка по классу инструмента и номеру"""
-        return self.process_request({'data': f'{class_code}|{order_id}', 'id': trans_id, 'cmd': 'getOrder_by_Number', 't': ''})
+        return self.process_request(trans_id, class_code, order_id)
 
-    def GetMoneyLimits(self, trans_id=0):
+    def getOrder_by_ID(self, class_code, sec_code, order_trans_id, trans_id=0):
+        """Заявка по инструменту и Id транзакции"""
+        return self.process_request(trans_id, class_code, sec_code, order_trans_id)
+
+    def getMoneyLimits(self, trans_id=0):
         """Все денежные лимиты"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'getMoneyLimits', 't': ''})
+        return self.process_request(trans_id)
 
-    def GetClientCode(self, trans_id=0):
+    def getClientCode(self, trans_id=0):
         """Основной (первый) код клиента"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'getClientCode', 't': ''})
+        return self.process_request(trans_id)
 
-    def GetClientCodes(self, trans_id=0):
+    def getClientCodes(self, trans_id=0):
         """Все коды клиента"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'getClientCodes', 't': ''})
+        return self.process_request(trans_id)
 
-    def GetAllDepoLimits(self, trans_id=0):
-        """Лимиты по бумагам (всем)"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'get_depo_limits', 't': ''})
+    def get_depo_limits(self, sec_code='', trans_id=0):
+        """Лимиты по бумагам (всем) / (по инструменту)"""
+        return self.process_request(trans_id, sec_code)
 
-    def GetDepoLimits(self, sec_code, trans_id=0):
-        """Лимиты по бумагам (по инструменту)"""
-        return self.process_request({'data': sec_code, 'id': trans_id, 'cmd': 'get_depo_limits', 't': ''})
+    def get_trades(self, class_code='', sec_code='', trans_id=0):
+        """Таблица сделок (вся) / (по инструменту(оба кода должны присутствовать))"""
+        return self.process_request(trans_id, class_code, sec_code)
 
-    def GetAllTrades(self, trans_id=0):
-        """Таблица сделок (вся)"""
-        return self.process_request({'data': f'', 'id': trans_id, 'cmd': 'get_trades', 't': ''})
-
-    def GetTrades(self, class_code, sec_code, trans_id=0):
-        """Таблица сделок (по инструменту)"""
-        return self.process_request({'data': f'{class_code}|{sec_code}', 'id': trans_id, 'cmd': 'get_trades', 't': ''})
-
-    def GetTradesByOrderNumber(self, order_num, trans_id=0):
+    def get_Trades_by_OrderNumber(self, order_num, trans_id=0):
         """Таблица сделок по номеру заявки"""
-        return self.process_request({'data': order_num, 'id': trans_id, 'cmd': 'get_Trades_by_OrderNumber', 't': ''})
+        return self.process_request(trans_id, order_num)
 
-    def GetAllStopOrders(self, trans_id=0):
-        """Стоп заявки (все)"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'get_stop_orders', 't': ''})
+    def get_stop_orders(self, class_code='', sec_code='', trans_id=0):
+        """Стоп заявки (все) / (по инструменту(оба кода должны присутствовать))"""
+        return self.process_request(trans_id, class_code, sec_code)
 
-    def GetStopOrders(self, class_code, sec_code, trans_id=0):
-        """Стоп заявки (по инструменту)"""
-        return self.process_request({'data': f'{class_code}|{sec_code}', 'id': trans_id, 'cmd': 'get_stop_orders', 't': ''})
-
-    def GetAllTrade(self, trans_id=0):
-        """Таблица обезличенных сделок (вся)"""
-        return self.process_request({'data': f'', 'id': trans_id, 'cmd': 'get_all_trades', 't': ''})
-
-    def GetTrade(self, class_code, sec_code, trans_id=0):
-        """Таблица обезличенных сделок (по инструменту)"""
-        return self.process_request({'data': f'{class_code}|{sec_code}', 'id': trans_id, 'cmd': 'get_all_trades', 't': ''})
+    def get_all_trades(self, class_code='', sec_code='', trans_id=0):
+        """Таблица обезличенных сделок (вся) / (по инструменту(оба кода должны присутствовать))"""
+        return self.process_request(trans_id, class_code, sec_code)
 
     # 3.2 Функции для обращения к спискам доступных параметров
 
-    def GetClassesList(self, trans_id=0):  # 1
+    def getClassesList(self, trans_id=0):  # 1
         """Список классов"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'getClassesList', 't': ''})
+        return self.process_request(trans_id)
 
-    def GetClassInfo(self, class_code, trans_id=0):  # 2
+    def getClassInfo(self, class_code, trans_id=0):  # 2
         """Информация о классе"""
-        return self.process_request({'data': class_code, 'id': trans_id, 'cmd': 'getClassInfo', 't': ''})
+        return self.process_request(trans_id, class_code)
 
-    def GetClassSecurities(self, class_code, trans_id=0):  # 3
+    def getClassSecurities(self, class_code, trans_id=0):  # 3
         """Список инструментов класса"""
-        return self.process_request({'data': class_code, 'id': trans_id, 'cmd': 'getClassSecurities', 't': ''})
+        return self.process_request(trans_id, class_code)
 
     # Функции для обращения к спискам доступных параметров QuikSharp
 
-    def GetOptionBoard(self, class_code, sec_code, trans_id=0):
+    def getOptionBoard(self, class_code, sec_code, trans_id=0):
         """Доска опционов"""
-        return self.process_request({'data': f'{class_code}|{sec_code}', 'id': trans_id, 'cmd': 'getOptionBoard', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code)
 
     # 3.3 Функции для получения информации по денежным средствам
 
-    def GetMoney(self, client_code, firm_id, tag, curr_code, trans_id=0):  # 1
+    def getMoney(self, client_code, firm_id, tag, curr_code, trans_id=0):  # 1
         """Денежные позиции"""
-        return self.process_request({'data': f'{client_code}|{firm_id}|{tag}|{curr_code}', 'id': trans_id, 'cmd': 'getMoney', 't': ''})
+        return self.process_request(trans_id, client_code, firm_id, tag, curr_code)
 
-    def GetMoneyEx(self, firm_id, client_code, tag, curr_code, limit_kind, trans_id=0):  # 2
+    def getMoneyEx(self, firm_id, client_code, tag, curr_code, limit_kind, trans_id=0):  # 2
         """Денежные позиции указанного типа"""
-        return self.process_request({'data': f'{firm_id}|{client_code}|{tag}|{curr_code}|{limit_kind}', 'id': trans_id, 'cmd': 'getMoneyEx', 't': ''})
+        return self.process_request(trans_id, firm_id, client_code, tag, curr_code, limit_kind)
 
     # 3.4 Функции для получения позиций по инструментам
 
-    def GetDepo(self, client_code, firm_id, sec_code, account, trans_id=0):  # 1
+    def getDepo(self, client_code, firm_id, sec_code, account, trans_id=0):  # 1
         """Позиции по инструментам"""
-        return self.process_request({'data': f'{client_code}|{firm_id}|{sec_code}|{account}', 'id': trans_id, 'cmd': 'getDepo', 't': ''})
+        return self.process_request(trans_id, client_code, firm_id, sec_code, account)
 
-    def GetDepoEx(self, firm_id, client_code, sec_code, account, limit_kind, trans_id=0):  # 2
+    def getDepoEx(self, firm_id, client_code, sec_code, account, limit_kind, trans_id=0):  # 2
         """Позиции по инструментам указанного типа"""
-        return self.process_request({'data': f'{firm_id}|{client_code}|{sec_code}|{account}|{limit_kind}', 'id': trans_id, 'cmd': 'getDepoEx', 't': ''})
+        return self.process_request(trans_id, firm_id, client_code, sec_code, account, limit_kind)
 
     # 3.5 Функция для получения информации по фьючерсным лимитам
 
-    def GetFuturesLimit(self, firm_id, account_id, limit_type, curr_code, trans_id=0):  # 1
+    def getFuturesLimit(self, firm_id, account_id, limit_type, curr_code, trans_id=0):  # 1
         """Фьючерсные лимиты"""
-        return self.process_request({'data': f'{firm_id}|{account_id}|{limit_type}|{curr_code}', 'id': trans_id, 'cmd': 'getFuturesLimit', 't': ''})
+        return self.process_request(trans_id, firm_id, account_id, limit_type, curr_code)
 
     # Функция для получения информации по фьючерсным лимитам QuikSharp
 
-    def GetFuturesClientLimits(self, trans_id=0):
+    def getFuturesClientLimits(self, trans_id=0):
         """Все фьючерсные лимиты"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'getFuturesClientLimits', 't': ''})
+        return self.process_request(trans_id)
 
     # 3.6 Функция для получения информации по фьючерсным позициям
 
-    def GetFuturesHolding(self, firm_id, account_id, sec_code, position_type, trans_id=0):  # 1
+    def getFuturesHolding(self, firm_id, account_id, sec_code, position_type, trans_id=0):  # 1
         """Фьючерсные позиции"""
-        return self.process_request({'data': f'{firm_id}|{account_id}|{sec_code}|{position_type}', 'id': trans_id, 'cmd': 'getFuturesHolding', 't': ''})
+        return self.process_request(trans_id, firm_id, account_id, sec_code, position_type)
 
     # Функция для получения информации по фьючерсным позициям QuikSharp
 
-    def GetFuturesHoldings(self, trans_id=0):
+    def getFuturesClientHoldings(self, trans_id=0):
         """Все фьючерсные позиции"""
-        return self.process_request({'data': '', 'id': trans_id, 'cmd': 'getFuturesClientHoldings', 't': ''})
+        return self.process_request(trans_id)
 
     # 3.7 Функция для получения информации по инструменту
 
-    def GetSecurityInfo(self, class_code, sec_code, trans_id=0):  # 1
+    def getSecurityInfo(self, class_code, sec_code, trans_id=0):  # 1
         """Информация по инструменту"""
-        return self.process_request({'data': f'{class_code}|{sec_code}', 'id': trans_id, 'cmd': 'getSecurityInfo', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code)
 
     # Функция для получения информации по инструменту QuikSharp
 
-    def GetSecurityInfoBulk(self, class_codes, sec_codes, trans_id=0):
+    def getSecurityInfoBulk(self, class_codes, sec_codes, trans_id=0):
         """Информация по инструментам"""
-        return self.process_request({'data': f'{class_codes}|{sec_codes}', 'id': trans_id, 'cmd': 'getSecurityInfoBulk', 't': ''})
+        return self.process_request(trans_id, class_codes, sec_codes)
 
-    def GetSecurityClass(self, classes_list, sec_code, trans_id=0):
+    def getSecurityClass(self, classes_list, sec_code, trans_id=0):
         """Класс по коду инструмента из заданных классов"""
-        return self.process_request({'data': f'{classes_list}|{sec_code}', 'id': trans_id, 'cmd': 'getSecurityClass', 't': ''})
+        return self.process_request(trans_id, classes_list, sec_code)
 
     # 3.8 Функция для получения даты торговой сессии
 
@@ -420,18 +408,19 @@ class QuikPy:
 
     def GetQuoteLevel2(self, class_code, sec_code, trans_id=0):  # 1
         """Стакан по классу и инструменту"""
-        return self.process_request({'data': f'{class_code}|{sec_code}', 'id': trans_id, 'cmd': 'GetQuoteLevel2', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code)
 
     # 3.10 Функции для работы с графиками
 
     # getLinesCount - 1. Кол-во линий в графике
 
-    def GetNumCandles(self, tag, trans_id=0):  # 2
+    def get_num_candles(self, tag, trans_id=0):  # 2
         """Кол-во свечей по тэгу"""
-        return self.process_request({'data': tag, 'id': trans_id, 'cmd': 'get_num_candles', 't': ''})
+        return self.process_request(trans_id, tag)
 
     # getCandlesByIndex - 3. Информация о свечках (реализовано в get_candles)
-    # CreateDataSource - 4. Создание источника данных c функциями: (реализовано в get_candles_from_data_source)
+    # CreateDataSource - 4. Создание источника данных c функциями
+    #                       (реализовано в get_candles_from_data_source)
     # - SetUpdateCallback - Привязка функции обратного вызова на изменение свечи
     # - O, H, L, C, V, T - Функции получения цен, объемов и времени
     # - Size - Функция кол-ва свечек в источнике данных
@@ -440,60 +429,61 @@ class QuikPy:
 
     # Функции для работы с графиками QuikSharp
 
-    def GetCandles(self, tag, line, first_candle, count, trans_id=0):
+    def get_candles(self, tag, line, first_candle, count, trans_id=0):
         """Свечки по идентификатору графика"""
-        return self.process_request({'data': f'{tag}|{line}|{first_candle}|{count}', 'id': trans_id, 'cmd': 'get_candles', 't': ''})
+        return self.process_request(trans_id, tag, line, first_candle, count)
 
     # ichechet - Добавлен выход по таймауту
-    def GetCandlesFromDataSource(self, class_code, sec_code, interval, count):
+    def get_candles_from_data_source(self, class_code, sec_code, interval, count):
         """Свечки"""
-        return self.process_request({'data': f'{class_code}|{sec_code}|{interval}|{count}', 'id': '1', 'cmd': 'get_candles_from_data_source', 't': ''})
+        # Хз почему тут нету trans_id и по умолчанию стоит 1
+        return self.process_request('1', class_code, sec_code, interval, count)
 
-    def SubscribeToCandles(self, class_code, sec_code, interval, trans_id=0):
+    def subscribe_to_candles(self, class_code, sec_code, interval, trans_id=0):
         """Подписка на свечки"""
-        return self.process_request({'data': f'{class_code}|{sec_code}|{interval}', 'id': trans_id, 'cmd': 'subscribe_to_candles', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code, interval)
 
-    def IsSubscribed(self, class_code, sec_code, interval, trans_id=0):
+    def is_subscribed(self, class_code, sec_code, interval, trans_id=0):
         """Есть ли подписка на свечки"""
-        return self.process_request({'data': f'{class_code}|{sec_code}|{interval}', 'id': trans_id, 'cmd': 'is_subscribed', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code, interval)
 
-    def UnsubscribeFromCandles(self, class_code, sec_code, interval, trans_id=0):
+    def unsubscribe_from_candles(self, class_code, sec_code, interval, trans_id=0):
         """Отмена подписки на свечки"""
-        return self.process_request({'data': f'{class_code}|{sec_code}|{interval}', 'id': trans_id, 'cmd': 'unsubscribe_from_candles', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code, interval)
 
     # 3.11 Функции для работы с заявками
 
-    def SendTransaction(self, transaction, trans_id=0):  # 1
+    def sendTransaction(self, transaction, trans_id=0):  # 1
         """Отправка транзакции в торговую систему"""
-        return self.process_request({'data': transaction, 'id': trans_id, 'cmd': 'sendTransaction', 't': ''})
+        return self.process_request(trans_id, transaction)
 
     # CalcBuySell - 2. Максимальное кол-во лотов в заявке
 
     # 3.12 Функции для получения значений таблицы "Текущие торги"
 
-    def GetParamEx(self, class_code, sec_code, param_name, trans_id=0):  # 1
+    def getParamEx(self, class_code, sec_code, param_name, trans_id=0):  # 1
         """Таблица текущих торгов"""
-        return self.process_request({'data': f'{class_code}|{sec_code}|{param_name}', 'id': trans_id, 'cmd': 'getParamEx', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code, param_name)
 
-    def GetParamEx2(self, class_code, sec_code, param_name, trans_id=0):  # 2
+    def getParamEx2(self, class_code, sec_code, param_name, trans_id=0):  # 2
         """Таблица текущих торгов по инструменту с возможностью отказа от получения"""
-        return self.process_request({'data': f'{class_code}|{sec_code}|{param_name}', 'id': trans_id, 'cmd': 'getParamEx2', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code, param_name)
 
     # Функция для получения значений таблицы "Текущие торги" QuikSharp
 
-    def GetParamEx2Bulk(self, class_codes, sec_codes, param_names, trans_id=0):
+    def getParamEx2Bulk(self, class_codes, sec_codes, param_names, trans_id=0):
         """Таблица текущих торгов по инструментам с возможностью отказа от получения"""
-        return self.process_request({'data': f'{class_codes}|{sec_codes}|{param_names}', 'id': trans_id, 'cmd': 'getParamEx2Bulk', 't': ''})
+        return self.process_request(trans_id, class_codes, sec_codes, param_names)
 
     # 3.13 Функции для получения параметров таблицы "Клиентский портфель"
 
-    def GetPortfolioInfo(self, firm_id, client_code, trans_id=0):  # 1
+    def getPortfolioInfo(self, firm_id, client_code, trans_id=0):  # 1
         """Клиентский портфель"""
-        return self.process_request({'data': f'{firm_id}|{client_code}', 'id': trans_id, 'cmd': 'getPortfolioInfo', 't': ''})
+        return self.process_request(trans_id, firm_id, client_code)
 
-    def GetPortfolioInfoEx(self, firm_id, client_code, limit_kind, trans_id=0):  # 2
+    def getPortfolioInfoEx(self, firm_id, client_code, limit_kind, trans_id=0):  # 2
         """Клиентский портфель по сроку расчетов"""
-        return self.process_request({'data': f'{firm_id}|{client_code}|{limit_kind}', 'id': trans_id, 'cmd': 'getPortfolioInfoEx', 't': ''})
+        return self.process_request(trans_id, firm_id, client_code, limit_kind)
 
     # 3.14 Функции для получения параметров таблицы "Купить/Продать"
 
@@ -501,101 +491,106 @@ class QuikPy:
     # getBuySellInfoEx - 2. Параметры таблицы купить/продать с дополнительными полями вывода
 
     # 3.15 Функции для работы с таблицами Рабочего места QUIK
-
-    # AddColumn - 1. Добавление колонки в таблицу
-    # AllocTable - 2. Структура, описывающая таблицу
-    # Clear - 3. Удаление содержимого таблицы
-    # CreateWindow - 4. Создание окна таблицы
-    # DeleteRow - 5. Удаление строки из таблицы
-    # DestroyTable - 6. Закрытие окна таблицы
-    # InsertRow - 7. Добавление строки в таблицу
-    # IsWindowClosed - 8. Закрыто ли окно с таблицей
-    # GetCell - 9. Данные ячейки таблицы
-    # GetTableSize - 10. Кол-во строк и столбцов таблицы
-    # GetWindowCaption - 11. Заголовок окна таблицы
-    # GetWindowRect - 12. Координаты верхнего левого и правого нижнего углов таблицы
-    # SetCell - 13. Установка значения ячейки таблицы
-    # SetWindowCaption - 14. Установка заголовка окна таблицы
-    # SetWindowPos - 15. Установка верхнего левого угла, и размеры таблицы
-    # SetTableNotificationCallback - 16. Установка функции обратного вызова для обработки событий в таблице
-    # RGB - 17. Преобразование каждого цвета в одно число для функци SetColor
-    # SetColor - 18. Установка цвета ячейки, столбца или строки таблицы
-    # Highlight - 19. Подсветка диапазона ячеек цветом фона и цветом текста на заданное время с плавным затуханием
-    # SetSelectedRow - 20. Выделение строки таблицы
+    '''
+    AddColumn - 1. Добавление колонки в таблицу
+    AllocTable - 2. Структура, описывающая таблицу
+    Clear - 3. Удаление содержимого таблицы
+    CreateWindow - 4. Создание окна таблицы
+    DeleteRow - 5. Удаление строки из таблицы
+    DestroyTable - 6. Закрытие окна таблицы
+    InsertRow - 7. Добавление строки в таблицу
+    IsWindowClosed - 8. Закрыто ли окно с таблицей
+    GetCell - 9. Данные ячейки таблицы
+    GetTableSize - 10. Кол-во строк и столбцов таблицы
+    GetWindowCaption - 11. Заголовок окна таблицы
+    GetWindowRect - 12. Координаты верхнего левого и правого нижнего углов таблицы
+    SetCell - 13. Установка значения ячейки таблицы
+    SetWindowCaption - 14. Установка заголовка окна таблицы
+    SetWindowPos - 15. Установка верхнего левого угла, и размеры таблицы
+    SetTableNotificationCallback - 16. Установка функции обратного вызова
+                                       для обработки событий в таблице
+    RGB - 17. Преобразование каждого цвета в одно число для функци SetColor
+    SetColor - 18. Установка цвета ячейки, столбца или строки таблицы
+    Highlight - 19. Подсветка диапазона ячеек цветом фона и цветом текста
+                    на заданное время с плавным затуханием
+    SetSelectedRow - 20. Выделение строки таблицы
+    '''
 
     # 3.16 Функции для работы с метками
 
-    def AddLabel(self, price, cur_date, cur_time, qty, path, label_id, alignment, background, trans_id=0):  # 1
+    def addLabel(self, price, cur_date, cur_time, qty, path,
+                 label_id, alignment, background, trans_id=0):  # 1
         """Добавление метки на график"""
-        return self.process_request({'data': f'{price}|{cur_date}|{cur_time}|{qty}|{path}|{label_id}|{alignment}|{background}', 'id': trans_id, 'cmd': 'AddLabel', 't': ''})
+        return self.process_request(trans_id, price, cur_date, cur_time, qty,
+                                    path, label_id, alignment, background)
 
-    def DelLabel(self, chart_tag, label_id, trans_id=0):  # 2
+    def delLabel(self, chart_tag, label_id, trans_id=0):  # 2
         """Удаление метки с графика"""
-        return self.process_request({'data': f'{chart_tag}|{label_id}', 'id': trans_id, 'cmd': 'DelLabel', 't': ''})
+        return self.process_request(trans_id, chart_tag, label_id)
 
-    def DelAllLabels(self, chart_tag, trans_id=0):  # 3
+    def delAllLabels(self, chart_tag, trans_id=0):  # 3
         """Удаление всех меток с графика"""
-        return self.process_request({'data': chart_tag, 'id': trans_id, 'cmd': 'DelAllLabels', 't': ''})
+        return self.process_request(trans_id, chart_tag)
 
-    def GetLabelParams(self, chart_tag, label_id, trans_id=0):  # 4
+    def getLabelParams(self, chart_tag, label_id, trans_id=0):  # 4
         """Получение параметров метки"""
-        return self.process_request({'data': f'{chart_tag}|{label_id}', 'id': trans_id, 'cmd': 'GetLabelParams', 't': ''})
+        return self.process_request(trans_id, chart_tag, label_id)
 
     # SetLabelParams - 5. Установка параметров метки
 
     # 3.17 Функции для заказа стакана котировок
 
-    def SubscribeLevel2Quotes(self, class_code, sec_code, trans_id=0):  # 1
+    def Subscribe_Level_II_Quotes(self, class_code, sec_code, trans_id=0):  # 1
         """Подписка на стакан по Классу|Коду бумаги"""
-        return self.process_request({'data': f'{class_code}|{sec_code}', 'id': trans_id, 'cmd': 'Subscribe_Level_II_Quotes', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code)
 
-    def UnsubscribeLevel2Quotes(self, class_code, sec_code, trans_id=0):  # 2
+    def Unsubscribe_Level_II_Quotes(self, class_code, sec_code, trans_id=0):  # 2
         """Отмена подписки на стакан по Классу|Коду бумаги"""
-        return self.process_request({'data': f'{class_code}|{sec_code}', 'id': trans_id, 'cmd': 'Unsubscribe_Level_II_Quotes', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code)
 
-    def IsSubscribedLevel2Quotes(self, class_code, sec_code, trans_id=0):  # 3
+    def IsSubscribed_Level_II_Quotes(self, class_code, sec_code, trans_id=0):  # 3
         """Есть ли подписка на стакан по Классу|Коду бумаги"""
-        return self.process_request({'data': f'{class_code}|{sec_code}', 'id': trans_id, 'cmd': 'IsSubscribed_Level_II_Quotes', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code)
 
     # 3.18 Функции для заказа параметров Таблицы текущих торгов
 
-    def ParamRequest(self, class_code, sec_code, param_name, trans_id=0):  # 1
+    def paramRequest(self, class_code, sec_code, param_name, trans_id=0):  # 1
         """Заказ получения таблицы текущих торгов по инструменту"""
-        return self.process_request({'data': f'{class_code}|{sec_code}|{param_name}', 'id': trans_id, 'cmd': 'paramRequest', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code, param_name)
 
-    def CancelParamRequest(self, class_code, sec_code, param_name, trans_id=0):  # 2
+    def cancelParamRequest(self, class_code, sec_code, param_name, trans_id=0):  # 2
         """Отмена заказа получения таблицы текущих торгов по инструменту"""
-        return self.process_request({'data': f'{class_code}|{sec_code}|{param_name}', 'id': trans_id, 'cmd': 'cancelParamRequest', 't': ''})
+        return self.process_request(trans_id, class_code, sec_code, param_name)
 
     # Функции для заказа параметров Таблицы текущих торгов QuikSharp
 
-    def ParamRequestBulk(self, class_codes, sec_codes, param_names, trans_id=0):
+    def paramRequestBulk(self, class_codes, sec_codes, param_names, trans_id=0):
         """Заказ получения таблицы текущих торгов по инструментам"""
-        return self.process_request({'data': f'{class_codes}|{sec_codes}|{param_names}', 'id': trans_id, 'cmd': 'paramRequestBulk', 't': ''})
+        return self.process_request(trans_id, class_codes, sec_codes, param_names)
 
-    def CancelParamRequestBulk(self, class_codes, sec_codes, param_names, trans_id=0):
+    def cancelParamRequestBulk(self, class_codes, sec_codes, param_names, trans_id=0):
         """Отмена заказа получения таблицы текущих торгов по инструментам"""
-        return self.process_request({'data': f'{class_codes}|{sec_codes}|{param_names}', 'id': trans_id, 'cmd': 'cancelParamRequestBulk', 't': ''})
+        return self.process_request(trans_id, class_codes, sec_codes, param_names)
 
     # 3.19 Функции для получения информации по единой денежной позиции
 
     def GetTrdAccByClientCode(self, firm_id, client_code, trans_id=0):  # 1
         """Торговый счет срочного рынка по коду клиента фондового рынка"""
-        return self.process_request({'data': f'{firm_id}|{client_code}', 'id': trans_id, 'cmd': 'getTrdAccByClientCode', 't': ''})
+        return self.process_request(trans_id, firm_id, client_code)
 
     def GetClientCodeByTrdAcc(self, firm_id, trade_account_id, trans_id=0):  # 2
         """Код клиента фондового рынка с единой денежной позицией по торговому счету срочного рынка"""
-        return self.process_request({'data': f'{firm_id}|{trade_account_id}', 'id': trans_id, 'cmd': 'getClientCodeByTrdAcc', 't': ''})
+        return self.process_request(trans_id, firm_id, trade_account_id)
 
     def IsUcpClient(self, firm_id, client, trans_id=0):  # 3
         """Имеет ли клиент единую денежную позицию"""
-        return self.process_request({'data': f'{firm_id}|{client}', 'id': trans_id, 'cmd': 'IsUcpClient', 't': ''})
+        return self.process_request(trans_id, firm_id, client)
 
     # Выход и закрытие
 
     def CloseConnectionAndThread(self):
         """Закрытие соединения для запросов и потока обработки функций обратного вызова"""
-        self.socket_requests.close()  # Закрываем соединение для запросов
+        self.socket_req.close()  # Закрываем соединение для запросов
         # Поток обработки функций обратного вызова больше не нужен
         self.callback_thread.process = False
 
