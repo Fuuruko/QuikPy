@@ -3,8 +3,9 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parents[2]))
 
+# Работа с QUIK из Python через LUA скрипты QuikSharp
 from QuikPy import QuikPy
-from pprint import pprint
+
 
 def get_all_accounts(prov):
     """Получение всех торговых счетов"""
@@ -19,12 +20,12 @@ def get_all_accounts(prov):
     5. Все заявки
     6. Все стоп заявки
     """
-    class_codes = prov.getClassesList()['data']  # 1
-    trade_accounts = prov.getTradeAccounts()['data']  # 2
-    money_limits = prov.getMoneyLimits()['data']  # 3
-    depo_limits = prov.get_depo_limits()['data']  # 4
-    orders = prov.get_orders()['data']  # 5
-    stop_orders = prov.get_stop_orders()['data']  # 6
+    class_codes = prov.getClassesList()  # 1
+    trade_accounts = prov.getTradeAccounts()  # 2
+    money_limits = prov.getMoneyLimits()  # 3
+    depo_limits = prov.get_depo_limits()  # 4
+    orders = prov.get_orders()  # 5
+    stop_orders = prov.get_stop_orders()  # 6
 
     # Удаляем последнюю запятую, разбиваем значения по запятой
     class_codes_list = class_codes[:-1].split(',')
@@ -52,21 +53,21 @@ def get_all_accounts(prov):
 
         # Классы
         for cls_code in intersect_cls_codes:
-            cls_info = prov.getClassInfo(cls_code)['data']  # Информация о классе
+            cls_info = prov.getClassInfo(cls_code)  # Информация о классе
             print(f'- Класс {cls_code} ({cls_info["name"]}), Тикеров {cls_info["nsecs"]}')
-        print()
             # Инструменты. Если выводить на экран, то занимают много места.
             # Список инструментов класса. Удаляем последнюю запятую, разбиваем значения по запятой
-            # class_securities = qpProvider.getClassSecurities(classCode)['data'][:-1].split(',')
+            # class_securities = qpProvider.getClassSecurities(classCode)[:-1].split(',')
             # print(f'  - Тикеры ({class_securities})')
+        print()
 
         # Для фьючерсов свои расчеты
         if firm_id == futures_firm_id:
             # Лимиты
-            limits = prov.getFuturesLimit(firm_id, tr_acc_id, 0, "SUR")["data"]
+            limits = prov.getFuturesLimit(firm_id, tr_acc_id, 0, "SUR")
             print(f'- Фьючерсный лимит {limits["cbplimit"]} SUR')
             # Позиции
-            futures_holdings = prov.getFuturesClientHoldings()['data']  # Все фьючерсные позиции
+            futures_holdings = prov.getFuturesClientHoldings()  # Все фьючерсные позиции
             # Активные фьючерсные позиции
             active_futures_holdings = []
             for fut_hold in futures_holdings:
@@ -100,7 +101,7 @@ def get_all_accounts(prov):
                 # Пробегаемся по всем позициям
                 for f_k_d_l in firm_kind_depo_limits:
                     sec_code = f_k_d_l["sec_code"]  # Код тикера
-                    cls_code = prov.getSecurityClass(class_codes, sec_code)['data']
+                    cls_code = prov.getSecurityClass(class_codes, sec_code)
                     entry_price = float(f_k_d_l["wa_position_price"])
                     last_price = float(prov.getParamEx(cls_code, sec_code, 'LAST')[
                                        'data']['param_value'])  # Последняя цена сделки
@@ -144,23 +145,23 @@ def get_all_accounts(prov):
 def get_account(prov, client_code='', firm_id='SPBFUT', trd_acc_id='SPBFUT00PST',
                 limit_kind=0, currency_code='SUR', futures=True):
     """Получение торгового счета. По умолчанию выдается счет срочного рынка"""
-    class_codes = prov.getClassesList()['data']  # Список классов
-    money_limits = prov.getMoneyLimits()['data']  # Все денежные лимиты (остатки на счетах)
+    class_codes = prov.getClassesList()  # Список классов
+    money_limits = prov.getMoneyLimits()  # Все денежные лимиты (остатки на счетах)
 
     # Все лимиты по бумагам (позиции по инструментам)
-    depo_limits = prov.get_depo_limits()['data']
-    orders = prov.get_orders()['data']  # Все заявки
-    stop_orders = prov.get_stop_orders()['data']  # Все стоп заявки
+    depo_limits = prov.get_depo_limits()
+    orders = prov.get_orders()  # Все заявки
+    stop_orders = prov.get_stop_orders()  # Все стоп заявки
 
     print(f'Код клиента {client_code}, Фирма {firm_id}, '
           f'Счет {trd_acc_id}, T{limit_kind}, {currency_code}')
 
     if futures:  # Для фьючерсов свои расчеты
         # input(prov.getFuturesLimit('SPBFUT589000', trd_acc_id, 0, "SUR"))
-        fut_limits = prov.getFuturesLimit(firm_id, trd_acc_id, 0, "SUR")["data"]["cbplimit"]
+        fut_limits = prov.getFuturesLimit(firm_id, trd_acc_id, 0, "SUR")["cbplimit"]
         print(
-            f'- Фьючерсный лимит {prov.getFuturesLimit(firm_id, trd_acc_id, 0, "SUR")["data"]["cbplimit"]} SUR')
-        futures_holdings = prov.getFuturesClientHoldings()['data']  # Все фьючерсные позиции
+            f'- Фьючерсный лимит {prov.getFuturesLimit(firm_id, trd_acc_id, 0, "SUR")["cbplimit"]} SUR')
+        futures_holdings = prov.getFuturesClientHoldings()  # Все фьючерсные позиции
 
         # Активные фьючерсные позиции
         active_futures_holdings = []
@@ -195,7 +196,7 @@ def get_account(prov, client_code='', firm_id='SPBFUT', trd_acc_id='SPBFUT00PST'
         for firm_kind_depo_limit in acc_depo_limits:  # Пробегаемся по всем позициям
             sec_code = firm_kind_depo_limit["sec_code"]  # Код тикера
             entry_price = float(firm_kind_depo_limit["wa_position_price"])
-            class_code = prov.getSecurityClass(class_codes, sec_code)['data']
+            class_code = prov.getSecurityClass(class_codes, sec_code)
             last_price = float(prov.getParamEx(class_code, sec_code, 'LAST')[
                                'data']['param_value'])  # Последняя цена сделки
             if class_code == 'TQOB':  # Для рынка облигаций
@@ -245,7 +246,7 @@ if __name__ == '__main__':  # Точка входа при запуске это
     get_all_accounts(qp_provider)
     print()
     # Российские фьючерсы и опционы (счет по умолчанию)
-    get_account(qp_provider, firm_id='SPBFUT589000',trd_acc_id='SPBFUTK5GUE')
+    get_account(qp_provider, firm_id='SPBFUT589000', trd_acc_id='SPBFUTK5GUE')
     # По списку полученных счетов обязательно проверьте каждый!
     # get_account('<Код клиента>', '<Код фирмы>', '<Счет>',
     #             <Номер дня лимита> , '<Валюта>',

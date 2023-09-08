@@ -75,6 +75,7 @@ class QuikPy:
         """Отправляем запрос в QUIK, получаем ответ из QUIK"""
         data_args = [str(arg) for arg in data_args if arg != '']
         data_args = '|'.join(data_args) if data_args else ''
+        # TODO: Delete (id, t) as useless?
         request = {'data': data_args,
                    'cmd': self.get_cmd(),
                    'id': trans_id,
@@ -95,9 +96,9 @@ class QuikPy:
                 data = ''.join(fragments)
                 try:
                     # Преобразуем в формате JSON
-                    # Т.к. остальные параметры нигде не используются
                     # TODO : return json_loads(data).data
-                    return json_loads(data)
+                    # т.к. остальные параметры нигде не используются
+                    return json_loads(data)['data']
                 # Бывает ситуация, когда данных приходит меньше, но это еще не конец данных
                 # Если это еще не конец данных то ждем фрагментов в буфере дальше
                 except JSONDecodeError:
@@ -434,6 +435,7 @@ class QuikPy:
         return self.process_request(trans_id, tag, line, first_candle, count)
 
     # ichechet - Добавлен выход по таймауту
+    # TODO: Change name
     def get_candles_from_data_source(self, class_code, sec_code, interval, count):
         """Свечки"""
         # Хз почему тут нету trans_id и по умолчанию стоит 1

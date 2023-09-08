@@ -2,38 +2,37 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parents[2]))
 
-from QuikPy import QuikPy  # Работа с QUIK из Python через LUA скрипты QuikSharp
+# Работа с QUIK из Python через LUA скрипты QuikSharp
+from QuikPy import QuikPy
 
 
 if __name__ == '__main__':  # Точка входа при запуске этого скрипта
     qp_provider = QuikPy()  # Подключение к локальному запущенному терминалу QUIK
 
-    firmId = 'MC0063100000'  # Фирма
-    classCode = 'TQBR'  # Класс тикера
-    secCode = 'SBER'  # Тикер
-    
-    # firmId = 'SPBFUT'  # Фирма
-    # classCode = 'SPBFUT'  # Класс тикера
-    # secCode = 'SiU3'  # Для фьючерсов: <Код тикера>
-    #                                    <Месяц экспирации: 3-H, 6-M, 9-U, 12-Z>
-    #                                    <Последняя цифра года>
+    cls_code = 'TQBR'  # Класс тикера
+    sec_code = 'SBER'  # Тикер
+
+    # cls_code = 'SPBFUT'  # Класс тикера
+    # sec_code = 'SiU3'  # Для фьючерсов: <Код тикера>
+    #                                     <Месяц экспирации: 3-H, 6-M, 9-U, 12-Z>
+    #                                     <Последняя цифра года>
 
     # Данные тикера
     # Интерпретатор языка Lua, Таблица 4.21 Инструменты
-    si = qp_provider.getSecurityInfo(classCode, secCode)['data']  
-    # print('Ответ от сервера:', si)
+    sec_inf = qp_provider.getSecurityInfo(cls_code, sec_code)
+    # print(f'Ответ от сервера: {sec_inf}')
     # Короткое наименование инструмента
-    print(f'Информация о тикере {classCode}.{secCode} ({si["short_name"]}):')  
+    print(f'Информация о тикере {cls_code}.{sec_code} ({sec_inf["short_name"]}):')
     # Торговый счет для класса тикера
-    tradeAccount = qp_provider.getTradeAccount(classCode)["data"]  
-    print('Торговый счет:', tradeAccount)
+    trd_acc = qp_provider.getTradeAccount(cls_code)
+    print('Торговый счет:', trd_acc)
     # Последняя цена сделки
-    lastPrice = float(qp_provider.getParamEx(classCode, secCode, 'LAST')['data']['param_value'])  
-    print('Последняя цена сделки:', lastPrice)
-    print('Валюта:', si['face_unit'])  # Валюта номинала
-    print('Лот:', si['lot_size'])  # Размер лота
-    print('Цифр после запятой:', si['scale'])  # Точность (кол-во значащих цифр после запятой)
-    print('Шаг цены:', si['min_price_step'])  # Минимальный шаг цены
+    last_price = float(qp_provider.getParamEx(cls_code, sec_code, 'LAST')['param_value'])
+    print('Последняя цена сделки:', last_price)
+    print('Валюта:', sec_inf['face_unit'])  # Валюта номинала
+    print('Лот:', sec_inf['lot_size'])  # Размер лота
+    print('Цифр после запятой:', sec_inf['scale'])  # Точность (кол-во значащих цифр после запятой)
+    print('Шаг цены:', sec_inf['min_price_step'])  # Минимальный шаг цены
 
     # Выход
     qp_provider.CloseConnectionAndThread()  # Перед выходом закрываем соединение и поток QuikPy
