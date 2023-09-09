@@ -10,8 +10,8 @@ sys.path.append(str(Path(__file__).parents[2]))
 from QuikPy import QuikPy
 
 
-def save_candels(class_code: str = 'TQBR', sec_codes: tuple = ('SBER',), time_frame: str = 'D',
-                 compression: int = 1, skip_first_date: bool = False,
+def save_candels(class_code: str = 'TQBR', sec_codes: tuple = ('SBER',),
+                 time_frame: str = 'D', compression: int = 1, skip_first_date: bool = False,
                  skip_last_date: bool = False, four_price_doji: bool = False):
     """Получение баров, объединение с имеющимися барами в файле (если есть), сохранение баров в файл
     class_code: Код площадки
@@ -56,6 +56,10 @@ def save_candels(class_code: str = 'TQBR', sec_codes: tuple = ('SBER',), time_fr
               f'{time_frame}{compression} из QUIK')
         # Получаем все бары из QUIK
         new_bars = qp_provider.get_candles_from_data_source(class_code, sec_code, interval, 0)
+        if not new_bars:
+            print(f'Данных по {class_code}.{sec_code} нету')
+            continue
+
         # Переводим список баров в pandas DataFrame
         pd_bars = pd.json_normalize(new_bars)
         # Чтобы получить дату/время переименовываем колонки
@@ -63,6 +67,7 @@ def save_candels(class_code: str = 'TQBR', sec_codes: tuple = ('SBER',), time_fr
                                 'datetime.day': 'day', 'datetime.hour': 'hour',
                                 'datetime.min': 'minute', 'datetime.sec': 'second'},
                        inplace=True)
+
         # Собираем дату/время из колонок
         pd_bars.index = pd.to_datetime(pd_bars[['year', 'month', 'day',
                                                 'hour', 'minute', 'second']])
@@ -139,7 +144,7 @@ if __name__ == '__main__':  # Точка входа при запуске это
 
     # Если получаем данные, когда рынок не работает, то берем все бары
     # skip_last_date = False
-
+    # TODO: Проверить информацию по тикерам прежде чем отправлять
     save_candels(class_code, sec_codes, four_price_doji=True)  # Дневные бары
     save_candels(class_code, sec_codes, 'M', 60,
                  skip_last_date=skip_last_date)  # часовые бары

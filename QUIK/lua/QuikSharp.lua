@@ -44,6 +44,7 @@ if is_quik() then
 		libPath = "\\clibs\\5.1_"..linkage.."\\"
 	end
 end
+
 package.path = package.path .. ";" .. script_path .. "\\?.lua;" .. script_path .. "\\?.luac"..";"..".\\?.lua;"..".\\?.luac"
 package.cpath = package.cpath .. ";" .. script_path .. libPath .. '?.dll'..";".. '.' .. libPath .. '?.dll'
 

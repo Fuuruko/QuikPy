@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parents[2]))
 
 # Работа с QUIK из Python через LUA скрипты QuikSharp
-from QuikPy import QuikPy  
+from QuikPy import QuikPy
 
 
 def print_callback(data):
@@ -46,13 +46,13 @@ if __name__ == '__main__':
     # Стакан. Чтобы отмена подписки работала корректно,
     # в QUIK должна быть ЗАКРЫТА Таблица Котировки тикера
     qp_prov.OnQuote = print_callback  # Обработчик изменения стакана котировок
-    print(f'Подписка на изменения стакана {cls_code}.{sec_code}:',
+    print('Подписка на изменения стакана {cls_code}.{sec_code}:',
           qp_prov.Subscribe_Level_II_Quotes(cls_code, sec_code))
     print('Статус подписки:', qp_prov.IsSubscribed_Level_II_Quotes(cls_code, sec_code))
-    sleep_sec = 3  # Кол-во секунд получения котировок
+    sleep_sec = 1  # Кол-во секунд получения котировок
     print('Секунд котировок:', sleep_sec)
     time.sleep(sleep_sec)  # Ждем кол-во секунд получения котировок
-    print(f'Отмена подписки на изменения стакана:',
+    print('Отмена подписки на изменения стакана: ',
           qp_prov.Unsubscribe_Level_II_Quotes(cls_code, sec_code))
     print('Статус подписки:',
           qp_prov.IsSubscribed_Level_II_Quotes(cls_code, sec_code))
@@ -66,8 +66,8 @@ if __name__ == '__main__':
     # qp_prov.OnAllTrade = qp_prov.DefaultHandler  # Возвращаем обработчик по умолчанию
 
     # Просмотр изменений состояния соединения терминала QUIK с сервером брокера
-    qp_prov.OnConnected = changed_connection  # Нажимаем кнопку "Установить соединение" в QUIK
-    qp_prov.OnDisconnected = changed_connection  # Нажимаем кнопку "Разорвать соединение" в QUIK
+    qp_prov.OnConnected = changed_connection
+    qp_prov.OnDisconnected = changed_connection
 
     # Новые свечки. При первой подписке получим все свечки с начала прошлой сессии
     # TODO В QUIK 9.2.13.15 перестала работать повторная подписка на минутные бары. Остальные работают
@@ -85,4 +85,5 @@ if __name__ == '__main__':
         print(f'Статус подписки на интервал {interval}:',
               qp_prov.is_subscribed(cls_code, sec_code, interval))
 
-    qp_prov.CloseConnectionAndThread()  # Перед выходом закрываем соединение и поток QuikPy
+    # Перед выходом закрываем соединение и поток QuikPy
+    qp_prov.CloseConnectionAndThread()

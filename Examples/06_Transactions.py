@@ -9,13 +9,12 @@ from QuikPy import QuikPy
 def on_trans_reply(data):
     """Обработчик события ответа на транзакцию пользователя"""
     print('OnTransReply')
-    print(data)  # Печатаем полученные данные
-
+    print(data)
 
 def on_order(data):
     """Обработчик события получения новой / изменения существующей заявки"""
     print('OnOrder')
-    print(data)  # Печатаем полученные данные
+    print(data)
 
 
 def on_trade(data):
@@ -85,6 +84,7 @@ if __name__ == '__main__':
     print(f'Новая лимитная/рыночная заявка отправлена на рынок: '
           f'{qp_provider.sendTransaction(transaction)}')
     '''
+
     '''
     # Удаление существующей лимитной заявки
     orderNum = 1234567890123456789  # 19-и значный номер заявки
@@ -110,6 +110,7 @@ if __name__ == '__main__':
         slippage = int(slippage)  # поэтому, приводим такое проскальзывание к целому числу
 
     # Все значения должны передаваться в виде строк
+    input('Transation\n')
     transaction = {
         'TRANS_ID': str(trans_id),  # Номер транзакции задается клиентом
         'CLIENT_CODE': '',  # Код клиента. Для фьючерсов его нет

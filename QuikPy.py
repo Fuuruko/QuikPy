@@ -16,16 +16,14 @@ class QuikPy:
     На основе Документации по языку LUA в QUIK из https://arqatech.com/ru/support/files/
     """
     BUFFER_SIZE = 1048576  # Размер буфера приема в байтах (1 МБайт)
-    socket_req = None  # Соединение для запросов
-    callback_thread = None  # Поток обработки функций обратного вызова
 
     @staticmethod
-    def get_cmd():
+    def get_cmd(up=2):
         '''
         Возращает имя ф-ции вызывающей process_request
         Имя ф-ции является коммандой вызываемой в Lua
         '''
-        return _getframe(2).f_code.co_name
+        return _getframe(up).f_code.co_name
 
     def DefaultHandler(self, data):
         """
@@ -39,7 +37,7 @@ class QuikPy:
         thread = current_thread()
         fragments = []
         while getattr(thread, 'process', True):
-            while True:  # Пока есть что-то в буфере ответов
+            while True:
                 fragment = self.callbacks.recv(self.BUFFER_SIZE)
                 # Декодирование из Windows-1251
                 fragments.append(fragment.decode('cp1251'))
@@ -57,8 +55,7 @@ class QuikPy:
                 if not data:
                     continue
                 try:
-                    # Преобразуем в формате JSON
-                    # TODO: Необходимость преобразования в json
+                    # Преобразуем из формата JSON
                     data = json_loads(data)
                 # Если разобрать не смогли (пришла не вся строка)
                 except JSONDecodeError:
@@ -66,22 +63,29 @@ class QuikPy:
                     # Т.к. неполной может быть только последняя строка,
                     # то выходим из разбора функций обратного выходва
                     break
-
+                # Вызов ф-ции обратного вызова
                 eval(f'self.{data["cmd"]}(data)')
 
         self.callbacks.close()
 
     def process_request(self, trans_id, *data_args):
         """Отправляем запрос в QUIK, получаем ответ из QUIK"""
-        data_args = [str(arg) for arg in data_args if arg != '']
-        data_args = '|'.join(data_args) if data_args else ''
+        data_args = [arg for arg in data_args if arg != ''] or ['']
+
         # TODO: Delete (id, t) as useless?
         request = {'data': data_args,
                    'cmd': self.get_cmd(),
                    'id': trans_id,
                    't': ''}
-        # Issue 13. В QUIK некорректно отображаются русские буквы UTF8
-        # Переводим в кодировку Windows 1251
+
+        if len(data_args) == 1:
+            request['data'] = data_args[0]
+
+        # Переводим в формат JSON на коленке
+        # NOTE: Если когда-нибудь в data_args появятся bool или tuple,
+        # то использовать ф-цию ниже. Вместо bool можно отправить str(bool)
+        # raw_data =f'{request}\r\n'.replace("'",'"').replace('True','true')
+        # raw_data =raw_data.replace('False','false').replace('(','[').replace(')',']')
         raw_data = f'{request}\r\n'.replace("'", '"').encode('cp1251')
 
         # Отправляем запрос в QUIK
@@ -95,9 +99,7 @@ class QuikPy:
             if len(fragment) < self.BUFFER_SIZE:
                 data = ''.join(fragments)
                 try:
-                    # Преобразуем в формате JSON
-                    # TODO : return json_loads(data).data
-                    # т.к. остальные параметры нигде не используются
+                    # Преобразуем из формата JSON
                     return json_loads(data)['data']
                 # Бывает ситуация, когда данных приходит меньше, но это еще не конец данных
                 # Если это еще не конец данных то ждем фрагментов в буфере дальше
@@ -167,8 +169,6 @@ class QuikPy:
             self.OnError,  # 24
         ) = (self.DefaultHandler,) * 24
 
-        self.callback_thread = Thread(target=self.callback_handler, name='CallbackThread')
-
         # IP адрес или название хоста
         # Порт для отправки запросов и получения ответов
         # Порт для функций обратного вызова
@@ -176,12 +176,15 @@ class QuikPy:
         self.req_port = requests_port
         self.cb_port = callbacks_port
 
+        # Соединение для запросов и обратного вызова
         self.socket_req = socket(AF_INET, SOCK_STREAM)
         self.callbacks = socket(AF_INET, SOCK_STREAM)
 
         self.socket_req.connect((self.host, self.req_port))
         self.callbacks.connect((self.host, self.cb_port))
 
+        # Поток обработки функций обратного вызова
+        self.callback_thread = Thread(target=self.callback_handler, name='CallbackThread')
         self.callback_thread.start()
 
     def __enter__(self):
@@ -375,7 +378,8 @@ class QuikPy:
 
     # 3.6 Функция для получения информации по фьючерсным позициям
 
-    def getFuturesHolding(self, firm_id, account_id, sec_code, position_type, trans_id=0):  # 1
+    def getFuturesHolding(self, firm_id='', account_id='', sec_code='', 
+                          position_type: int = '', trans_id=0):  # 1
         """Фьючерсные позиции"""
         return self.process_request(trans_id, firm_id, account_id, sec_code, position_type)
 

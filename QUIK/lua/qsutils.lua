@@ -257,7 +257,7 @@ end
 --- get a decoded message as a table
 function receiveRequest()
     if not is_connected then
-        return nil, "not conencted"
+        return nil, "not connected"
     end
     local status, requestString= pcall(response_client.receive, response_client)
     if status and requestString then

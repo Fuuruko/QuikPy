@@ -115,6 +115,7 @@ function OnStop(s)
     return 1000
 end
 
+--TODO: if is_connected don't needed?
 function OnTrade(trade)
     local msg = {}
     msg.t = timemsec()

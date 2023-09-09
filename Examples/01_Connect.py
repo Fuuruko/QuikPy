@@ -19,9 +19,9 @@ if __name__ == '__main__':
     # qp_provider = QuikPy(host='<Адрес IP>',
     #                      requests_port='<Порт запросов>',
     #                      callbacks_port='<Порт подписок>')
-    print(f"Терминал QUIK подключен к серверу: {qp_provider.isConnected() == 1}")
+    print(f'Терминал QUIK подключен к серверу: {qp_provider.isConnected() == 1}')
     # Проверка работы скрипта QuikSharp. Должен вернуть Pong
-    print(f"Отклик QUIK на команду Ping: {qp_provider.ping()}")
+    print(f'Отклик QUIK на команду Ping: {qp_provider.ping()}')
 
     # Проверяем работу запрос/ответ
 
@@ -37,8 +37,7 @@ if __name__ == '__main__':
     print(f'Дата и время на сервере: {dt}')
     msg = 'Hello from Python!'
     # Проверка работы QUIK. Сообщение в QUIK должно показаться как информационное
-    print(f"Отправка сообщения в QUIK: {msg}{qp_provider.message(msg)}")
-
+    print(f'Отправка сообщения в QUIK: {msg}{qp_provider.message(msg)}')
     # Нажимаем кнопку "Установить соединение" в QUIK
     qp_provider.OnConnected = lambda data: print(data)
     # Нажимаем кнопку "Разорвать соединение" в QUIK
