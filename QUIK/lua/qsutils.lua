@@ -181,34 +181,34 @@ local callback_client
 --- accept client on server
 local function getResponseServer()
     log('Waiting for a response client...', 0)
-	if not response_server then
-		log("Cannot bind to response_server, probably the port is already in use", 3)
-	else
-		while true do
-			local status, client, err = pcall(response_server.accept, response_server )
-			if status and client then
-				return client
-			else
-				log(err, 3)
-			end
-		end
-	end
+    if not response_server then
+        log("Cannot bind to response_server, probably the port is already in use", 3)
+    else
+        while true do
+            local status, client, err = pcall(response_server.accept, response_server )
+            if status and client then
+                return client
+            else
+                log(err, 3)
+            end
+        end
+    end
 end
 
 local function getCallbackClient()
     log('Waiting for a callback client...', 0)
-	if not callback_server then
-		log("Cannot bind to callback_server, probably the port is already in use", 3)
-	else
-		while true do
-			local status, client, err = pcall(callback_server.accept, callback_server)
-			if status and client then
-				return client
-			else
-				log(err, 3)
-			end
-		end
-	end
+    if not callback_server then
+        log("Cannot bind to callback_server, probably the port is already in use", 3)
+    else
+        while true do
+            local status, client, err = pcall(callback_server.accept, callback_server)
+            if status and client then
+                return client
+            else
+                log(err, 3)
+            end
+        end
+    end
 end
 
 function qsutils.connect(response_host, response_port, callback_host, callback_port)

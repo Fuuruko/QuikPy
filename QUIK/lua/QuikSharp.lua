@@ -13,22 +13,22 @@ script_path = "."
 if is_quik() then
     script_path = getScriptPath()
     
-	quikVersion = getInfoParam("VERSION")
+    quikVersion = getInfoParam("VERSION")
 
-	if quikVersion ~= nil then
-		local t={}
-		for str in string.gmatch(quikVersion, "([^%.]+)") do
-			table.insert(t, str)
+    if quikVersion ~= nil then
+        local t={}
+        for str in string.gmatch(quikVersion, "([^%.]+)") do
+            table.insert(t, str)
         end
-		quikVersion = tonumber(t[1]) * 100 + tonumber(t[2])
-	end
+        quikVersion = tonumber(t[1]) * 100 + tonumber(t[2])
+    end
 
-	if quikVersion == nil then
-		message("QUIK# cannot detect QUIK version", 3)
-		return
-	else
-		libPath = "\\clibs"
-	end
+    if quikVersion == nil then
+        message("QUIK# cannot detect QUIK version", 3)
+        return
+    else
+        libPath = "\\clibs"
+    end
     
     -- MD dynamic, requires MSVCRT
     -- MT static, MSVCRT is linked statically with luasocket
@@ -36,15 +36,15 @@ if is_quik() then
     -- but in one issue someone said it doesn't work on machines that do not have Visual Studio. 
     local linkage = "MD"
     
-	if quikVersion >= 805 then
+    if quikVersion >= 805 then
         libPath = libPath .. "64\\53_"..linkage.."\\"
-	elseif quikVersion >= 800 then
+    elseif quikVersion >= 800 then
         libPath = libPath .. "64\\5.1_"..linkage.."\\"
-	else
-		libPath = "\\clibs\\5.1_"..linkage.."\\"
-	end
+    else
+        libPath = "\\clibs\\5.1_"..linkage.."\\"
+    end
 end
-
+--TODO: Add support for lua 5.4
 package.path = package.path .. ";" .. script_path .. "\\?.lua;" .. script_path .. "\\?.luac"..";"..".\\?.lua;"..".\\?.luac"
 package.cpath = package.cpath .. ";" .. script_path .. libPath .. '?.dll'..";".. '.' .. libPath .. '?.dll'
 

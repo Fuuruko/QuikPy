@@ -38,9 +38,9 @@ def get_all_accounts(prov):
 
         # Уникальные коды клиента по фирме
         client_code = set()
-        for moneyLimit in money_limits:
-            if moneyLimit['firmid'] == firm_id:
-                client_code.add(moneyLimit['client_code'])
+        for money_limit in money_limits:
+            if money_limit['firmid'] == firm_id:
+                client_code.add(money_limit['client_code'])
         print(f'Код клиента {list(client_code)[0] if client_code else "не задан"}, '
               f'Фирма {firm_id}, Счет {tr_acc_id} ({trd_acc["description"]})')
 
@@ -67,7 +67,7 @@ def get_all_accounts(prov):
             limits = prov.getFuturesLimit(firm_id, tr_acc_id, 0, "SUR")
             print(f'- Фьючерсный лимит {limits["cbplimit"]} SUR')
             # Позиции
-            futures_holdings = prov.getFuturesClientHoldings()  # Все фьючерсные позиции
+            futures_holdings = prov.getFuturesHolding()  # Все фьючерсные позиции
             # Активные фьючерсные позиции
             active_futures_holdings = []
             for fut_hold in futures_holdings:
@@ -82,29 +82,29 @@ def get_all_accounts(prov):
 
             # Денежные лимиты по фирме
             firm_money_limits = []
-            for moneyLimit in money_limits:
-                if moneyLimit['firmid'] == firm_id:
-                    firm_money_limits.append(moneyLimit)
-                    limit_kind = moneyLimit['limit_kind']  # День лимита
-                    print(f'- Денежный лимит {moneyLimit["tag"]} на T{limit_kind}: '
-                          f'{moneyLimit["currentbal"]} {moneyLimit["currcode"]}')
+            for money_limit in money_limits:
+                if money_limit['firmid'] == firm_id:
+                    firm_money_limits.append(money_limit)
+                    limit_kind = money_limit['limit_kind']  # День лимита
+                    print(f'- Денежный лимит {money_limit["tag"]} на T{limit_kind}: '
+                          f'{money_limit["currentbal"]} {money_limit["currcode"]}')
 
                 # Позиции
                 firm_kind_depo_limits = []
-                for depoLimit in depo_limits:
+                for depo_limit in depo_limits:
                     # Берем только открытые позиции по фирме и дню
-                    if (depoLimit['firmid'] == firm_id
-                            and depoLimit['limit_kind'] == limit_kind
-                            and depoLimit['currentbal'] != 0):
-                        firm_kind_depo_limits.append(depoLimit)
+                    if (depo_limit['firmid'] == firm_id
+                            and depo_limit['limit_kind'] == limit_kind
+                            and depo_limit['currentbal'] != 0):
+                        firm_kind_depo_limits.append(depo_limit)
 
                 # Пробегаемся по всем позициям
                 for f_k_d_l in firm_kind_depo_limits:
                     sec_code = f_k_d_l["sec_code"]  # Код тикера
                     cls_code = prov.getSecurityClass(class_codes, sec_code)
                     entry_price = float(f_k_d_l["wa_position_price"])
-                    last_price = float(prov.getParamEx(cls_code, sec_code, 'LAST')[
-                                       'data']['param_value'])  # Последняя цена сделки
+                    # Последняя цена сделки
+                    last_price = float(prov.getParamEx(cls_code, sec_code, 'LAST')['param_value'])
                     if cls_code == 'TQOB':  # Для рынка облигаций
                         last_price *= 10
                     print(f'- Позиция {cls_code}.{sec_code} '
@@ -128,17 +128,17 @@ def get_all_accounts(prov):
         print()
         # Стоп заявки
         firm_stop_orders = []
-        for stopOrder in stop_orders:
+        for stop_order in stop_orders:
             # Активные стоп заявки по фирме
             # TODO: Необходимость (order['flags'] & 0b1 == 0b1)?
-            if stopOrder['firmid'] == firm_id and stopOrder['flags'] & 0b1 == 0b1:
-                firm_stop_orders.append(stopOrder)
+            if stop_order['firmid'] == firm_id and stop_order['flags'] & 0b1 == 0b1:
+                firm_stop_orders.append(stop_order)
                 # Заявка на покупку
-                buy = stopOrder['flags'] & 0b100 != 0b100
-                print(f'- Стоп заявка номер {stopOrder["order_num"]} '
+                buy = stop_order['flags'] & 0b100 != 0b100
+                print(f'- Стоп заявка номер {stop_order["order_num"]} '
                       f'{"Покупка" if buy else "Продажа"} '
-                      f'{stopOrder["class_code"]}.{stopOrder["sec_code"]} '
-                      f'{stopOrder["qty"]} @ {stopOrder["price"]}')
+                      f'{stop_order["class_code"]}.{stop_order["sec_code"]} '
+                      f'{stop_order["qty"]} @ {stop_order["price"]}')
         print()
 
 
@@ -159,9 +159,8 @@ def get_account(prov, client_code='', firm_id='SPBFUT', trd_acc_id='SPBFUT00PST'
     if futures:  # Для фьючерсов свои расчеты
         # input(prov.getFuturesLimit('SPBFUT589000', trd_acc_id, 0, "SUR"))
         fut_limits = prov.getFuturesLimit(firm_id, trd_acc_id, 0, "SUR")["cbplimit"]
-        print(
-            f'- Фьючерсный лимит {prov.getFuturesLimit(firm_id, trd_acc_id, 0, "SUR")["cbplimit"]} SUR')
-        futures_holdings = prov.getFuturesClientHoldings()  # Все фьючерсные позиции
+        print(f'- Фьючерсный лимит {fut_limits} SUR')
+        futures_holdings = prov.getFuturesHolding()  # Все фьючерсные позиции
 
         # Активные фьючерсные позиции
         active_futures_holdings = []
@@ -190,15 +189,15 @@ def get_account(prov, client_code='', firm_id='SPBFUT', trd_acc_id='SPBFUT00PST'
             if (depo_limit['client_code'] == client_code  # Выбираем по коду клиента
                     and depo_limit['firmid'] == firm_id  # Фирме
                     and depo_limit['limit_kind'] == limit_kind  # Дню лимита
-                    and depo_limit["currentbal"] == 0):  # Берем только открытые позиции по фирме и дню
+                    and depo_limit["currentbal"] == 0):  # Позиции открытые только по фирме и дню
                 acc_depo_limits.append(depo_limit)
 
         for firm_kind_depo_limit in acc_depo_limits:  # Пробегаемся по всем позициям
             sec_code = firm_kind_depo_limit["sec_code"]  # Код тикера
             entry_price = float(firm_kind_depo_limit["wa_position_price"])
             class_code = prov.getSecurityClass(class_codes, sec_code)
-            last_price = float(prov.getParamEx(class_code, sec_code, 'LAST')[
-                               'data']['param_value'])  # Последняя цена сделки
+            # Последняя цена сделки
+            last_price = float(prov.getParamEx(class_code, sec_code, 'LAST')['param_value'])
             if class_code == 'TQOB':  # Для рынка облигаций
                 last_price *= 10
 
@@ -253,4 +252,4 @@ if __name__ == '__main__':  # Точка входа при запуске это
     #             <Счет фьючерсов=True, иначе=False>)
 
     # Выход
-    qp_provider.CloseConnectionAndThread()  # Перед выходом закрываем соединение и поток QuikPy
+    qp_provider.close_connection()  # Перед выходом закрываем соединение и поток QuikPy

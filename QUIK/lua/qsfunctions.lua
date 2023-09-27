@@ -127,11 +127,17 @@ function qsfunctions.sleep(msg)
 end
 
 --- Функция для вывода отладочной информации.
-function qsfunctions.PrintDbgStr(msg)
+function qsfunctions.debug_message(msg)
     log(msg.data, 0)
     msg.data = ""
     return msg
 end
+
+---------------------
+-- Graph functions --
+---------------------
+
+-- DON'T FIXED
 
 -- Выводит на график метку
 function qsfunctions.addLabel(msg)
@@ -279,21 +285,18 @@ end
 --- Функция предназначена для получения списка кодов классов, переданных с сервера в ходе сеанса связи.
 function qsfunctions.getClassesList(msg)
     msg.data = getClassesList()
---    if  msg.data then log(msg.data) else log("getClassesList returned nil") end
     return msg
 end
 
 --- Функция предназначена для получения информации о классе.
 function qsfunctions.getClassInfo(msg)
     msg.data = getClassInfo(msg.data)
---    if msg.data then log(msg.data.name) else log("getClassInfo  returned nil") end
     return msg
 end
 
 --- Функция предназначена для получения списка кодов бумаг для списка классов, заданного списком кодов.
 function qsfunctions.getClassSecurities(msg)
     msg.data = getClassSecurities(msg.data)
---    if msg.data then log(msg.data) else log("getClassSecurities returned nil") end
     return msg
 end
 
@@ -320,7 +323,8 @@ function qsfunctions.getSecurityInfoBulk(msg)
 			if not status then
 				log("Error happened while calling getSecurityInfoBulk with ".. class_code .. "|".. sec_code .. ": ".. security)
 			end
-			table.insert(result, json.null)
+			-- table.insert(result, json.null)
+			table.insert(result, false)
 		end
 	end
 	msg.data = result
@@ -358,16 +362,17 @@ end
 function qsfunctions.getClientCodes(msg)
 	local client_codes = {}
 	for i=0,getNumberOf("MONEY_LIMITS")-1 do
-		local clientcode = getItem("MONEY_LIMITS",i).client_code
-		if clientcode ~= nil then
+		local client_code = getItem("MONEY_LIMITS",i).client_code
+		if client_code ~= nil then
 			fnd = false
-			for index, value in ipairs(client_codes) do
-				if value == clientcode then
+			for i, value in ipairs(client_codes) do
+				if value == client_code then
 					fnd = true
+					break
 				end
 			end
 			if fnd == false then
-				table.insert(client_codes, clientcode)
+				table.insert(client_codes, client_code)
 			end
 		end
 	end
@@ -377,9 +382,10 @@ end
 
 --- Функция возвращает торговый счет для запрашиваемого кода класса
 function qsfunctions.getTradeAccount(msg)
+	local class_code = msg.data
 	for i=0,getNumberOf("trade_accounts")-1 do
 		local trade_account = getItem("trade_accounts",i)
-		if string.find(trade_account.class_codes,'|' .. msg.data .. '|',1,1) then
+		if string.find(trade_account.class_codes, class_code, 1, 1) then
 			msg.data = trade_account.trdaccid
 			return msg
 		end
@@ -407,7 +413,7 @@ end
 ---------------------------------------------------------------------
 
 --- Функция заказывает на сервер получение стакана по указанному классу и бумаге.
-function qsfunctions.Subscribe_Level_II_Quotes(msg)
+function qsfunctions.subs_level_II_quotes(msg)
     local spl = msg.data
     local class_code, sec_code = spl[1], spl[2]
     msg.data = Subscribe_Level_II_Quotes(class_code, sec_code)
@@ -415,7 +421,7 @@ function qsfunctions.Subscribe_Level_II_Quotes(msg)
 end
 
 --- Функция отменяет заказ на получение с сервера стакана по указанному классу и бумаге.
-function qsfunctions.Unsubscribe_Level_II_Quotes(msg)
+function qsfunctions.unsubs_level_II_quotes(msg)
     local spl = msg.data
     local class_code, sec_code = spl[1], spl[2]
     msg.data = Unsubscribe_Level_II_Quotes(class_code, sec_code)
@@ -423,7 +429,7 @@ function qsfunctions.Unsubscribe_Level_II_Quotes(msg)
 end
 
 --- Функция позволяет узнать, заказан ли с сервера стакан по указанному классу и бумаге.
-function qsfunctions.IsSubscribed_Level_II_Quotes(msg)
+function qsfunctions.is_subs_level_II_quotes(msg)
     local spl = msg.data
     local class_code, sec_code = spl[1], spl[2]
     msg.data = IsSubscribed_Level_II_Quotes(class_code, sec_code)
@@ -478,14 +484,13 @@ function qsfunctions.calc_buy_sell(msg)
     return msg
 end
 
---- отправляет транзакцию на сервер и возвращает пустое сообщение, которое
+--- Отправляет транзакцию на сервер и возвращает пустое сообщение, которое
 -- будет проигноировано. Вместо него, отправитель будет ждать события
 -- OnTransReply, из которого по TRANS_ID он получит результат отправленной транзакции
 function qsfunctions.sendTransaction(msg)
     local res = sendTransaction(msg.data)
     if res~="" then
         -- error handling
-        msg.cmd = "lua_transaction_error"
         msg.data.lua_error = res
         log('msg.data '..to_json(msg.data), 2)
         return msg
@@ -496,7 +501,8 @@ function qsfunctions.sendTransaction(msg)
     end
 end
 
---- Функция заказывает получение параметров Таблицы текущих торгов. В случае успешного завершения функция возвращает «true», иначе – «false»
+--- Функция заказывает получение параметров Таблицы текущих торгов.
+-- В случае успешного завершения функция возвращает «true», иначе – «false»
 function qsfunctions.paramRequest(msg)
     local spl = msg.data
     local class_code, sec_code, param_name = spl[1], spl[2], spl[3]
@@ -504,7 +510,7 @@ function qsfunctions.paramRequest(msg)
     return msg
 end
 
---- Функция принимает список строк (JSON Array) в формате class_code|sec_code|param_name, вызывает функцию paramRequest для каждой строки.
+--- Функция принимает список (JSON Array) в формате [class_code, sec_code, param_name]
 -- Возвращает список ответов в том же порядке
 function qsfunctions.paramRequestBulk(msg)
 	local result = {}
@@ -517,7 +523,8 @@ function qsfunctions.paramRequestBulk(msg)
 	return msg
 end
 
---- Функция отменяет заказ на получение параметров Таблицы текущих торгов. В случае успешного завершения функция возвращает «true», иначе – «false»
+--- Функция отменяет заказ на получение параметров Таблицы текущих торгов. 
+-- В случае успешного завершения функция возвращает «true», иначе – «false»
 function qsfunctions.cancelParamRequest(msg)
     local spl = msg.data
     local class_code, sec_code, param_name = spl[1], spl[2], spl[3]
@@ -525,7 +532,7 @@ function qsfunctions.cancelParamRequest(msg)
     return msg
 end
 
---- Функция принимает список строк (JSON Array) в формате class_code|sec_code|param_name, вызывает функцию CancelParamRequest для каждой строки.
+--- Функция принимает список (JSON Array) в формате [class_code, sec_code, param_name]
 -- Возвращает список ответов в том же порядке
 function qsfunctions.cancelParamRequestBulk(msg)
 	local result = {}
@@ -547,10 +554,11 @@ function qsfunctions.getParamEx(msg)
     return msg
 end
 
---- Функция предназначена для получения значении? всех параметров биржевои? информации из Таблицы текущих торгов
--- с возможностью в дальнеи?шем отказаться от получения определенных параметров, заказанных с помощью функции ParamRequest.
--- Для отказа от получения какого-либо параметра воспользуи?тесь функциеи? CancelParamRequest.
--- Функция возвращает таблицу Lua с параметрами, аналогичными параметрам, возвращаемым функциеи? getParamEx
+--- Функция предназначена для получения значений всех параметров биржевой информации
+-- из Таблицы текущих торгов с возможностью в дальнейшем отказаться от получения определенных
+-- параметров, заказанных с помощью функции ParamRequest. Для отказа от получения какого-либо
+-- параметра воспользуйтесь функцией CancelParamRequest. Функция возвращает таблицу Lua с параметрами,
+-- аналогичными параметрам, возвращаемым функцией getParamEx Параметры
 function qsfunctions.getParamEx2(msg)
     local spl = msg.data
     local class_code, sec_code, param_name = spl[1], spl[2], spl[3]
@@ -558,7 +566,7 @@ function qsfunctions.getParamEx2(msg)
     return msg
 end
 
---- Функция принимает список строк (JSON Array) в формате class_code|sec_code|param_name и возвращает результаты вызова
+--- Функция принимает список (JSON Array) в формате [class_code, sec_code, param_name] и возвращает результаты вызова
 -- функции getParamEx2 для каждой строки запроса в виде списка в таком же порядке, как в запросе
 function qsfunctions.getParamEx2Bulk(msg)
 	local result = {}
@@ -574,16 +582,16 @@ end
 -- Функция предназначена для получения информации по бумажным лимитам.
 function qsfunctions.getDepo(msg)
     local spl = msg.data
-    local clientCode, firmId, secCode, account = spl[1], spl[2], spl[3], spl[4]
-    msg.data = getDepo(clientCode, firmId, secCode, account)
+    local clientCode, firmId, secCode, trdaccid = spl[1], spl[2], spl[3], spl[4]
+    msg.data = getDepo(clientCode, firmId, secCode, trdaccid)
     return msg
 end
 
--- Функция предназначена для получения информации по бумажным лимитам.
+-- Функция предназначена для получения информации по бумажным лимитам указанного типа.
 function qsfunctions.getDepoEx(msg)
     local spl = msg.data
-    local firmId, clientCode, secCode, account, limit_kind = spl[1], spl[2], spl[3], spl[4], spl[5]
-    msg.data = getDepoEx(firmId, clientCode, secCode, account, limit_kind)
+    local firmId, clientCode, secCode, trdaccid, limit_kind = spl[1], spl[2], spl[3], spl[4], spl[5]
+    msg.data = getDepoEx(firmId, clientCode, secCode, trdaccid, limit_kind)
     return msg
 end
 
@@ -618,12 +626,12 @@ end
 function qsfunctions.getFuturesLimit(msg)
     local spl = msg.data
     local firmId, accId, limitType, currCode = spl[1], spl[2], spl[3], spl[4]
-	local result, err = getFuturesLimit(firmId, accId, limitType*1, currCode)
+	local result, err = getFuturesLimit(firmId, accId, limitType, currCode)
 	if result then
 		msg.data = result
 	else
-		log("Futures limit returns nil", 3)
-		msg.data = nil
+		log("Futures limit returns false", 2)
+		msg.data = false
 	end
     return msg
 end
@@ -705,36 +713,34 @@ function qsfunctions.getOrder_by_ID(msg)
 end
 
 ---- Функция возвращает заявку по номеру
-function qsfunctions.getOrder_by_Number(msg)
+function qsfunctions.get_order_by_num(msg)
+	local order_num = msg.data
 	for i=0,getNumberOf("orders")-1 do
 		local order = getItem("orders",i)
-		if order.order_num == msg.data then
+		if order.order_num == order_num then
 			msg.data = order
 			return msg
 		end
 	end
+	msg.data = false
 	return msg
 end
 
 --- Возвращает заявку по её номеру и классу инструмента ---
---- На основе http://help.qlua.org/ch4_5_1_1.htm ---
-function qsfunctions.get_order_by_number(msg)
+function qsfunctions.get_order_by_cls_num(msg)
 	local spl = msg.data
-	local class_code = spl[1]
-	local order_id = spl[2]
+	local class_code, order_id = spl[1], spl[2]
 	msg.data = getOrderByNumber(class_code, order_id)
 	return msg
 end
 
 --- Возвращает список записей из таблицы 'Лимиты по бумагам'
---- На основе http://help.qlua.org/ch4_6_11.htm и http://help.qlua.org/ch4_5_3.htm
 function qsfunctions.get_depo_limits(msg)
 	local sec_code = msg.data
-	local count = getNumberOf("depo_limits")
 	local depo_limits = {}
-	for i = 0, count - 1 do
+	for i = 0, getNumberOf("depo_limits") - 1 do
 		local depo_limit = getItem("depo_limits", i)
-		if msg.data == "" or depo_limit.sec_code == sec_code then
+		if sec_code == "" or depo_limit.sec_code == sec_code then
 			table.insert(depo_limits, depo_limit)
 		end
 	end
@@ -742,7 +748,7 @@ function qsfunctions.get_depo_limits(msg)
 	return msg
 end
 
--- Функция возвращает таблицу сделок (всю или по заданному инструменту)
+--- Функция возвращает таблицу сделок (всю или по заданному инструменту)
 function qsfunctions.get_trades(msg)
 	if msg.data ~= "" then
 		local spl = msg.data
@@ -760,10 +766,9 @@ function qsfunctions.get_trades(msg)
 	return msg
 end
 
--- Функция возвращает таблицу сделок по номеру заявки
+--- Функция возвращает таблицу сделок по номеру заявки
 function qsfunctions.get_Trades_by_OrderNumber(msg)
 	local order_num = msg.data
-
 	local trades = {}
 	for i = 0, getNumberOf("trades") - 1 do
 		local trade = getItem("trades", i)
@@ -775,7 +780,8 @@ function qsfunctions.get_Trades_by_OrderNumber(msg)
 	return msg
 end
 
--- Функция предназначена для получения значений параметров таблицы «Клиентский портфель», соответствующих идентификатору участника торгов «firmid» и коду клиента «client_code».
+--- Функция предназначена для получения значений параметров таблицы «Клиентский портфель»,
+-- соответствующих идентификатору участника торгов «firmid» и коду клиента «client_code».
 function qsfunctions.getPortfolioInfo(msg)
     local spl = msg.data
     local firmId, clientCode = spl[1], spl[2]
@@ -783,7 +789,9 @@ function qsfunctions.getPortfolioInfo(msg)
     return msg
 end
 
--- Функция предназначена для получения значений параметров таблицы «Клиентский портфель», соответствующих идентификатору участника торгов «firmid», коду клиента «client_code» и виду лимита «limit_kind».
+--- Функция предназначена для получения значений параметров таблицы «Клиентский портфель»,
+-- соответствующих идентификатору участника торгов «firmid», коду клиента «client_code»
+-- и виду лимита «limit_kind».
 function qsfunctions.getPortfolioInfoEx(msg)
     local spl = msg.data
     local firmId, clientCode, limit_kind = spl[1], spl[2], spl[3]
@@ -795,7 +803,7 @@ end
 function qsfunctions.get_all_trades(msg)
 	if msg.data ~= "" then
 		local spl = msg.data
-		class_code, sec_code = spl[1], spl[2]
+		local class_code, sec_code = spl[1], spl[2]
 	end
 
 	local trades = {}
@@ -820,45 +828,39 @@ function qsfunctions.getOptionBoard(msg)
 	if result then
 		msg.data = result
 	else
-		log("Option board returns nil", 3)
-		msg.data = nil
+		log("Option board returns false", 3)
+		msg.data = false
 	end
     return msg
 end
 
 function getOptions(classCode,secCode)
 	--classCode = "SPBOPT"
---BaseSecList="RIZ6"
-local SecList = getClassSecurities(classCode) --все сразу
-local t={}
-local p={}
-for sec in string.gmatch(SecList, "([^,]+)") do --перебираем опционы по очереди.
-            local Optionbase=getParamEx(classCode,sec,"optionbase").param_image
-            local Optiontype=getParamEx(classCode,sec,"optiontype").param_image
-            if (string.find(secCode,Optionbase)~=nil) then
-
-
-                p={
-                    ["code"]=getParamEx(classCode,sec,"code").param_image,
-					["Name"]=getSecurityInfo(classCode,sec).name,
-					["DAYS_TO_MAT_DATE"]=getParamEx(classCode,sec,"DAYS_TO_MAT_DATE").param_value+0,
-					["BID"]=getParamEx(classCode,sec,"BID").param_value+0,
-					["OFFER"]=getParamEx(classCode,sec,"OFFER").param_value+0,
-					["OPTIONBASE"]=getParamEx(classCode,sec,"optionbase").param_image,
-					["OPTIONTYPE"]=getParamEx(classCode,sec,"optiontype").param_image,
-					["Longname"]=getParamEx(classCode,sec,"longname").param_image,
-					["shortname"]=getParamEx(classCode,sec,"shortname").param_image,
-					["Volatility"]=getParamEx(classCode,sec,"volatility").param_value+0,
-					["Strike"]=getParamEx(classCode,sec,"strike").param_value+0
-                    }
-
-
-
-                        table.insert( t, p )
-            end
-
-end
-return t
+	--BaseSecList="RIZ6"
+	local SecList = getClassSecurities(classCode) --все сразу
+	local t={}
+	local p={}
+	for sec in string.gmatch(SecList, "([^,]+)") do --перебираем опционы по очереди.
+        local Optionbase=getParamEx(classCode,sec,"optionbase").param_image
+        local Optiontype=getParamEx(classCode,sec,"optiontype").param_image
+        if (string.find(secCode,Optionbase)~=nil) then
+            p={
+                ["code"]=getParamEx(classCode,sec,"code").param_image,
+				["Name"]=getSecurityInfo(classCode,sec).name,
+				["DAYS_TO_MAT_DATE"]=getParamEx(classCode,sec,"DAYS_TO_MAT_DATE").param_value+0,
+				["BID"]=getParamEx(classCode,sec,"BID").param_value+0,
+				["OFFER"]=getParamEx(classCode,sec,"OFFER").param_value+0,
+				["OPTIONBASE"]=getParamEx(classCode,sec,"optionbase").param_image,
+				["OPTIONTYPE"]=getParamEx(classCode,sec,"optiontype").param_image,
+				["Longname"]=getParamEx(classCode,sec,"longname").param_image,
+				["shortname"]=getParamEx(classCode,sec,"shortname").param_image,
+				["Volatility"]=getParamEx(classCode,sec,"volatility").param_value+0,
+				["Strike"]=getParamEx(classCode,sec,"strike").param_value+0
+			}
+            table.insert( t, p )
+        end
+    end
+	return t
 end
 
 --------------------------
@@ -869,7 +871,7 @@ end
 function qsfunctions.get_stop_orders(msg)
 	if msg.data ~= "" then
 		local spl = msg.data
-		class_code, sec_code = spl[1], spl[2]
+		local class_code, sec_code = spl[1], spl[2]
 	end
 
 	local count = getNumberOf("stop_orders")
@@ -892,8 +894,7 @@ end
 function qsfunctions.get_num_candles(msg)
 	log("Called get_num_candles" .. msg.data, 2)
 	local tag = msg.data
-
-	msg.data = getNumCandles(tag) * 1
+	msg.data = getNumCandles(tag)
 	return msg
 end
 
@@ -902,12 +903,9 @@ end
 function qsfunctions.get_candles(msg)
 	log("Called get_candles" .. to_json(msg.data), 2)
 	local spl = msg.data
-	local tag = spl[1]
-	local line = spl[2]
-	local first_candle = spl[3]
-	local count = spl[4]
+	local tag, line, first_candle, count = spl[1], spl[2], spl[3], spl[4]
 	if count == 0 then
-		count = getNumCandles(tag) * 1
+		count = getNumCandles(tag)
 	end
 	log("Count: " .. count, 2)
 	local t,n,l = getCandlesByIndex(tag, line, first_candle, count)
@@ -922,8 +920,9 @@ function qsfunctions.get_candles(msg)
 end
 
 --- Возвращаем все свечи по заданному инструменту и интервалу
--- (ichechet) Если исторические данные по тикеру не приходят, то QUIK блокируется. Чтобы это не происходило, вводим таймаут
-function qsfunctions.get_candles_from_data_source(msg)
+-- (ichechet) Если исторические данные по тикеру не приходят, то QUIK блокируется.
+-- Чтобы это не происходило, вводим таймаут
+function qsfunctions.get_candles_ds(msg)
 	local ds, is_error = create_data_source(msg)
 	if not is_error then
 		-- Источник данных изначально приходит пустым. Нужно подождать пока он заполнится данными. Бесконечно ждать тоже нельзя. Вводим таймаут
@@ -933,8 +932,9 @@ function qsfunctions.get_candles_from_data_source(msg)
 			s = s + 100 -- Запоминаем кол-во прошедших миллисекунд
 		until (ds:Size() > 0 or s > 5000) -- До тех пор, пока не придут данные или пока не наступит таймаут
 
-		local count = msg.data[4] -- возвращаем последние count свечей. Если равен 0, то возвращаем все доступные свечи.
-		local class, sec, interval = get_candles_param(msg)
+		-- возвращаем последние count свечей. Если равен 0, то возвращаем все доступные свечи.
+		local spl = msg.data
+		local class, sec, interval, count = spl[1], spl[2], spl[3], spl[4]
 		local candles = {}
 		local start_i = count == 0 and 1 or math.max(1, ds:Size() - count + 1)
 		for i = start_i, ds:Size() do
@@ -951,7 +951,8 @@ function qsfunctions.get_candles_from_data_source(msg)
 end
 
 function create_data_source(msg)
-	local class, sec, interval = get_candles_param(msg)
+	local spl = msg.data
+	local class, sec, interval = spl[1], spl[2], spl[3]
 	local ds, error_descr = CreateDataSource(class, sec, interval)
 	local is_error = false
 	if(error_descr ~= nil) then
@@ -959,7 +960,7 @@ function create_data_source(msg)
 		is_error = true
 	elseif ds == nil then
 		local lua_error = "Can't create data source for " .. class .. ", " .. sec .. ", " .. tostring(interval)
-		msg.data = "lua_create_data_source_error" .. lua_error
+		msg.data = "lua_create_data_source_error " .. lua_error
 		is_error = true
 	end
 	return ds, is_error
@@ -981,10 +982,11 @@ data_sources = {}
 last_indexes = {}
 
 --- Подписаться на получения свечей по заданному инструмент и интервалу
-function qsfunctions.subscribe_to_candles(msg)
+function qsfunctions.subs_to_candles(msg)
 	local ds, is_error = create_data_source(msg)
 	if not is_error then
-		local class, sec, interval = get_candles_param(msg)
+		local spl = msg.data
+		local class, sec, interval = spl[1], spl[2], spl[3]
 		local key = get_key(class, sec, interval)
 		data_sources[key] = ds
 		last_indexes[key] = ds:Size()
@@ -1015,8 +1017,9 @@ function data_source_callback(index, class, sec, interval)
 end
 
 --- Отписать от получения свечей по заданному инструменту и интервалу
-function qsfunctions.unsubscribe_from_candles(msg)
-	local class, sec, interval = get_candles_param(msg)
+function qsfunctions.unsubs_from_candles(msg)
+	local spl = msg.data
+	local class, sec, interval = spl[1], spl[2], spl[3]
 	local key = get_key(class, sec, interval)
 	data_sources[key]:Close()
 	data_sources[key] = nil
@@ -1025,8 +1028,9 @@ function qsfunctions.unsubscribe_from_candles(msg)
 end
 
 --- Проверить открыта ли подписка на заданный инструмент и интервал
-function qsfunctions.is_subscribed(msg)
-	local class, sec, interval = get_candles_param(msg)
+function qsfunctions.is_subs(msg)
+	local spl = msg.data
+	local class, sec, interval = spl[1], spl[2], spl[3]
 	local key = get_key(class, sec, interval)
 	for k, v in pairs(data_sources) do
 		if key == k then
@@ -1036,12 +1040,6 @@ function qsfunctions.is_subscribed(msg)
 	end
 	msg.data = false
 	return msg
-end
-
---- Возвращает из msg информацию о инструменте на который подписываемся и интервале
-function get_candles_param(msg)
-	local spl = msg.data
-	return spl[1], spl[2], spl[3]
 end
 
 --- Возвращает уникальный ключ для инструмента на который подписываемся и инетрвала
@@ -1069,6 +1067,7 @@ function qsfunctions.GetClientCodeByTrdAcc(msg)
     return msg
 end
 
+-- isUcpClient doesn't exist
 --- Функция предназначена для получения признака, указывающего имеет ли клиент единую денежную позицию
 function qsfunctions.IsUcpClient(msg)
     local spl = msg.data

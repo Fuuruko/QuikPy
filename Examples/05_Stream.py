@@ -11,6 +11,7 @@ from QuikPy import QuikPy
 
 def print_callback(data):
     """Пользовательский обработчик событий:
+
     - Изменение стакана котировок
     - Получение обезличенной сделки
     - Получение новой свечки
@@ -20,6 +21,7 @@ def print_callback(data):
 
 def changed_connection(data):
     """Пользовательский обработчик событий:
+
     - Соединение установлено
     - Соединение разорвано
     """
@@ -47,23 +49,23 @@ if __name__ == '__main__':
     # в QUIK должна быть ЗАКРЫТА Таблица Котировки тикера
     qp_prov.OnQuote = print_callback  # Обработчик изменения стакана котировок
     print('Подписка на изменения стакана {cls_code}.{sec_code}:',
-          qp_prov.Subscribe_Level_II_Quotes(cls_code, sec_code))
-    print('Статус подписки:', qp_prov.IsSubscribed_Level_II_Quotes(cls_code, sec_code))
+          qp_prov.subs_level_II_quotes(cls_code, sec_code))
+    print('Статус подписки:', qp_prov.is_subs_level_II_quotes(cls_code, sec_code))
     sleep_sec = 1  # Кол-во секунд получения котировок
     print('Секунд котировок:', sleep_sec)
     time.sleep(sleep_sec)  # Ждем кол-во секунд получения котировок
     print('Отмена подписки на изменения стакана: ',
-          qp_prov.Unsubscribe_Level_II_Quotes(cls_code, sec_code))
+          qp_prov.unsubs_level_II_quotes(cls_code, sec_code))
     print('Статус подписки:',
-          qp_prov.IsSubscribed_Level_II_Quotes(cls_code, sec_code))
-    qp_prov.OnQuote = qp_prov.DefaultHandler  # Возвращаем обработчик по умолчанию
+          qp_prov.is_subs_level_II_quotes(cls_code, sec_code))
+    qp_prov.OnQuote = qp_prov.default_handler  # Возвращаем обработчик по умолчанию
 
     # Обезличенные сделки. Чтобы получать, в QUIK открыть Таблицу обезличенных сделок, указать тикер
     # qp_prov.OnAllTrade = print_callback  # Обработчик получения обезличенной сделки
     # sleep_sec = 1  # Кол-во секунд получения обезличенных сделок
     # print('Секунд обезличенных сделок:', sleep_sec)
     # time.sleep(sleep_sec)  # Ждем кол-во секунд получения обезличенных сделок
-    # qp_prov.OnAllTrade = qp_prov.DefaultHandler  # Возвращаем обработчик по умолчанию
+    # qp_prov.OnAllTrade = qp_prov.default_handler  # Возвращаем обработчик по умолчанию
 
     # Просмотр изменений состояния соединения терминала QUIK с сервером брокера
     qp_prov.OnConnected = changed_connection
@@ -71,19 +73,20 @@ if __name__ == '__main__':
 
     # Новые свечки. При первой подписке получим все свечки с начала прошлой сессии
     # TODO В QUIK 9.2.13.15 перестала работать повторная подписка на минутные бары. Остальные работают
-    # Перед повторной подпиской нужно перезапустить скрипт QuikSharp.lua Подписка станет первой, все заработает
+    # Перед повторной подпиской нужно перезапустить скрипт QuikSharp.lua,
+    # Подписка станет первой, все заработает
     qp_prov.OnNewCandle = print_callback  # Обработчик получения новой свечки
     for interval in (60,):  # (1, 60, 1440) = Минутки, часовки, дневки
         print(f'Подписка на интервал {interval}:',
-              qp_prov.subscribe_to_candles(cls_code, sec_code, interval))
+              qp_prov.subs_to_candles(cls_code, sec_code, interval))
         print(f'Статус подписки на интервал {interval}:',
-              qp_prov.is_subscribed(cls_code, sec_code, interval))
+              qp_prov.is_subs(cls_code, sec_code, interval))
     input('Enter - отмена\n')
     for interval in (60,):  # (1, 60, 1440) = Минутки, часовки, дневки
         print(f'Отмена подписки на интервал {interval}',
-              qp_prov.unsubscribe_from_candles(cls_code, sec_code, interval))
+              qp_prov.unsubs_from_candles(cls_code, sec_code, interval))
         print(f'Статус подписки на интервал {interval}:',
-              qp_prov.is_subscribed(cls_code, sec_code, interval))
+              qp_prov.is_subs(cls_code, sec_code, interval))
 
     # Перед выходом закрываем соединение и поток QuikPy
-    qp_prov.CloseConnectionAndThread()
+    qp_prov.close_connection()

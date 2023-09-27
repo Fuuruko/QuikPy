@@ -47,4 +47,4 @@ if __name__ == '__main__':
 
     input('Enter - выход\n')
     # Перед выходом закрываем соединение и поток QuikPy
-    qp_provider.CloseConnectionAndThread()
+    qp_provider.close_connection()
