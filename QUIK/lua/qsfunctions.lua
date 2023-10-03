@@ -1000,13 +1000,18 @@ end
 
 function data_source_callback(index, class, sec, interval)
 	local key = get_key(class, sec, interval)
-	if index ~= last_indexes[key] then
+	if last_indexes[key] < index then
 		last_indexes[key] = index
 
 		local candle = fetch_candle(data_sources[key], index - 1)
 		candle.sec = sec
 		candle.class = class
 		candle.interval = interval
+		if index == data_sources[key]:Size() then
+			candle.live = true
+		else
+			candle.live = false
+		end
 
 		local msg = {}
         msg.t = timemsec()
