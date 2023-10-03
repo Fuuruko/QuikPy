@@ -3,7 +3,9 @@ from socket import socket, AF_INET, SOCK_STREAM
 # Результат работы функций обратного вызова будем получать в отдельном потоке
 from threading import current_thread, Thread
 # Принимать данные в QUIK будем через JSON
-from orjson import loads as json_loads, dumps as json_dumps, OPT_APPEND_NEWLINE
+from json import loads as json_loads, dumps as json_dumps
+# Multiple times faster than standard json lib
+# from orjson import loads as json_loads, dumps as json_dumps, OPT_APPEND_NEWLINE
 # Ошибка декодирования JSON
 from json.decoder import JSONDecodeError
 from sys import _getframe
@@ -12,8 +14,8 @@ from sys import _getframe
 class QuikPy:
     """Работа с Quik из Python через LUA скрипты QuikSharp
 
-    https://github.com/finsight/QUIKSharp/tree/master/src/QuikSharp/lua
-    На основе Документации по языку LUA в QUIK из https://arqatech.com/ru/support/files/
+        https://github.com/finsight/QUIKSharp/tree/master/src/QuikSharp/lua
+        На основе Документации по языку LUA в QUIK из https://arqatech.com/ru/support/files/
     """
 
     BUFFER_SIZE = 1048576  # Размер буфера приема в байтах (1 МБайт)
@@ -27,9 +29,9 @@ class QuikPy:
         return _getframe(up).f_code.co_name
 
     def default_handler(self, data):
-        """
-        Пустой обработчик события по умолчанию.
-        Его можно заменить на пользовательский
+        """Пустой обработчик события по умолчанию.
+
+        Можно заменить на пользовательский
         """
         pass
 
@@ -65,7 +67,7 @@ class QuikPy:
                     # то выходим из разбора функций обратного выходва
                     break
                 # Вызов ф-ции обратного вызова
-                eval(f'self.{data["cmd"]}(data)')
+                eval(f'self.{data["cmd"]}(data["data"])')
 
         self.callbacks.close()
 
@@ -85,8 +87,8 @@ class QuikPy:
 
         # Переводим в формат JSON
         # NOTE: 5x faster without decode/encode, but without russian language
-        # raw_data = f'{request}\r\n'.replace("'", '"').encode('cp1251')
-        raw_data = json_dumps(request, option=OPT_APPEND_NEWLINE).decode('utf-8').encode('cp1251')
+        # raw_data = json_dumps(request, option=OPT_APPEND_NEWLINE).decode('utf-8').encode('cp1251')
+        raw_data = ''.join([json_dumps(request),'\n']).encode('cp1251')
 
         # Отправляем запрос в QUIK
         self.socket_req.sendall(raw_data)
@@ -108,36 +110,36 @@ class QuikPy:
 
     def __init__(self, host='127.0.0.1', requests_port=34130, callbacks_port=34131):
         """Инициализация"""
-        """
-        1. Новая фирма
-        2. Получение обезличенной сделки
-        3. Получение новой / изменение существующей сделки
-        4. Получение новой / изменение существующей заявки
-        5. Изменение позиций по счету
-        6. Изменение ограничений по срочному рынку
-        7. Удаление ограничений по срочному рынку
-        8. Изменение позиции по срочному рынку
-        9. Изменение денежной позиции
-        10. Удаление денежной позиции
-        11. Изменение позиций по инструментам
-        12. Удаление позиции по инструментам
-        13. Изменение денежных средств
-        14. Получение новой / изменение существующей стоп-заявки
-        15. Ответ на транзакцию пользователя
-        16. Изменение текущих параметров
-        17. Изменение стакана котировок
-        18. Отключение терминала от сервера QUIK
-        19. Соединение терминала с сервером QUIK
-        20. Закрытие терминала QUIK
-        21. Остановка LUA скрипта в терминале QUIK / закрытие терминала QUIK
-        22. Запуск LUA скрипта в терминале QUIK
-        23. Получение новой свечки
-        24. Сообщение об ошибке
+        """Ф-ции обратного вызова
+            1. Новая фирма
+            2. Получение обезличенной сделки
+            3. Получение новой / изменение существующей сделки
+            4. Получение новой / изменение существующей заявки
+            5. Изменение позиций по счету
+            6. Изменение ограничений по срочному рынку
+            7. Удаление ограничений по срочному рынку
+            8. Изменение позиции по срочному рынку
+            9. Изменение денежной позиции
+            10. Удаление денежной позиции
+            11. Изменение позиций по инструментам
+            12. Удаление позиции по инструментам
+            13. Изменение денежных средств
+            14. Получение новой / изменение существующей стоп-заявки
+            15. Ответ на транзакцию пользователя
+            16. Изменение текущих параметров
+            17. Изменение стакана котировок
+            18. Отключение терминала от сервера QUIK
+            19. Соединение терминала с сервером QUIK
+            20. Закрытие терминала QUIK
+            21. Остановка LUA скрипта в терминале QUIK / закрытие терминала QUIK
+            22. Запуск LUA скрипта в терминале QUIK
+            23. Получение новой свечки
+            24. Сообщение об ошибке
 
-        Не реализовано
-        OnNegDeal - 25. Получение новой / изменение существующей внебиржевой заявки
-        OnNegTrade - 26. Получение новой / изменение существующей сделки для исполнения
-        OnCleanUp - 27. Смена сервера QUIK / Пользователя / Сессии
+            Не реализовано
+            OnNegDeal - 25. Получение новой / изменение существующей внебиржевой заявки
+            OnNegTrade - 26. Получение новой / изменение существующей сделки для исполнения
+            OnCleanUp - 27. Смена сервера QUIK / Пользователя / Сессии
         """
         (
             self.OnFirm,  # 1
@@ -222,41 +224,41 @@ class QuikPy:
     def getInfoParam(self, params: str, trans_id=0):  # 3
         """Значения параметров информационного окна
 
-        params:
-        VERSION             Версия программы
-        TRADEDATE           Дата торгов
-        SERVERTIME          Время сервера
-        LASTRECORDTIME      Время последней записи
-        NUMRECORDS          Число записей
-        LASTRECORD          Последняя запись
-        LATERECORD          Отставшая запись
-        CONNECTION          Соединение
-        IPADDRESS           IP-адрес сервера
-        IPPORT              Порт сервера
-        IPCOMMENT           Описание соединения
-        SERVER              Описание сервера
-        SESSIONID           Идентификатор сессии
-        USER                Пользователь
-        USERID              ID пользователя
-        ORG                 Организация
-        MEMORY              Занято памяти
-        LOCALTIME           Текущее время
-        CONNECTIONTIME      Время на связи
-        MESSAGESSENT        Передано сообщений
-        ALLSENT             Передано всего байт
-        BYTESSENT           Передано полезных байт
-        BYTESPERSECSENT     Передано за секунду
-        MESSAGESRECV        Принято сообщений
-        BYTESRECV           Принято полезных байт
-        ALLRECV             Принято всего байт
-        BYTESPERSECRECV     Принято за секунду
-        AVGSENT             Средняя скорость передачи
-        AVGRECV             Средняя скорость приема
-        LASTPINGTIME        Время последней проверки связи
-        LASTPINGDURATION    Задержка данных при обмене с сервером
-        AVGPINGDURATION     Средняя задержка данных
-        MAXPINGTIME         Время максимальной задержки
-        MAXPINGDURATION     Максимальная задержка данных
+            params:
+            VERSION             Версия программы
+            TRADEDATE           Дата торгов
+            SERVERTIME          Время сервера
+            LASTRECORDTIME      Время последней записи
+            NUMRECORDS          Число записей
+            LASTRECORD          Последняя запись
+            LATERECORD          Отставшая запись
+            CONNECTION          Соединение
+            IPADDRESS           IP-адрес сервера
+            IPPORT              Порт сервера
+            IPCOMMENT           Описание соединения
+            SERVER              Описание сервера
+            SESSIONID           Идентификатор сессии
+            USER                Пользователь
+            USERID              ID пользователя
+            ORG                 Организация
+            MEMORY              Занято памяти
+            LOCALTIME           Текущее время
+            CONNECTIONTIME      Время на связи
+            MESSAGESSENT        Передано сообщений
+            ALLSENT             Передано всего байт
+            BYTESSENT           Передано полезных байт
+            BYTESPERSECSENT     Передано за секунду
+            MESSAGESRECV        Принято сообщений
+            BYTESRECV           Принято полезных байт
+            ALLRECV             Принято всего байт
+            BYTESPERSECRECV     Принято за секунду
+            AVGSENT             Средняя скорость передачи
+            AVGRECV             Средняя скорость приема
+            LASTPINGTIME        Время последней проверки связи
+            LASTPINGDURATION    Задержка данных при обмене с сервером
+            AVGPINGDURATION     Средняя задержка данных
+            MAXPINGTIME         Время максимальной задержки
+            MAXPINGDURATION     Максимальная задержка данных
         """
         return self._process_request(trans_id, params)
 
@@ -532,28 +534,28 @@ class QuikPy:
 
     # 3.15 Функции для работы с таблицами Рабочего места QUIK
     """
-    AddColumn - 1. Добавление колонки в таблицу
-    AllocTable - 2. Структура, описывающая таблицу
-    Clear - 3. Удаление содержимого таблицы
-    CreateWindow - 4. Создание окна таблицы
-    DeleteRow - 5. Удаление строки из таблицы
-    DestroyTable - 6. Закрытие окна таблицы
-    InsertRow - 7. Добавление строки в таблицу
-    IsWindowClosed - 8. Закрыто ли окно с таблицей
-    GetCell - 9. Данные ячейки таблицы
-    GetTableSize - 10. Кол-во строк и столбцов таблицы
-    GetWindowCaption - 11. Заголовок окна таблицы
-    GetWindowRect - 12. Координаты верхнего левого и правого нижнего углов таблицы
-    SetCell - 13. Установка значения ячейки таблицы
-    SetWindowCaption - 14. Установка заголовка окна таблицы
-    SetWindowPos - 15. Установка верхнего левого угла, и размеры таблицы
-    SetTableNotificationCallback - 16. Установка функции обратного вызова
-                                  для обработки событий в таблице
-    RGB - 17. Преобразование каждого цвета в одно число для функци SetColor
-    SetColor - 18. Установка цвета ячейки, столбца или строки таблицы
-    Highlight - 19. Подсветка диапазона ячеек цветом фона и цветом текста
-               на заданное время с плавным затуханием
-    SetSelectedRow - 20. Выделение строки таблицы
+        AddColumn - 1. Добавление колонки в таблицу
+        AllocTable - 2. Структура, описывающая таблицу
+        Clear - 3. Удаление содержимого таблицы
+        CreateWindow - 4. Создание окна таблицы
+        DeleteRow - 5. Удаление строки из таблицы
+        DestroyTable - 6. Закрытие окна таблицы
+        InsertRow - 7. Добавление строки в таблицу
+        IsWindowClosed - 8. Закрыто ли окно с таблицей
+        GetCell - 9. Данные ячейки таблицы
+        GetTableSize - 10. Кол-во строк и столбцов таблицы
+        GetWindowCaption - 11. Заголовок окна таблицы
+        GetWindowRect - 12. Координаты верхнего левого и правого нижнего углов таблицы
+        SetCell - 13. Установка значения ячейки таблицы
+        SetWindowCaption - 14. Установка заголовка окна таблицы
+        SetWindowPos - 15. Установка верхнего левого угла, и размеры таблицы
+        SetTableNotificationCallback - 16. Установка функции обратного вызова
+                                      для обработки событий в таблице
+        RGB - 17. Преобразование каждого цвета в одно число для функци SetColor
+        SetColor - 18. Установка цвета ячейки, столбца или строки таблицы
+        Highlight - 19. Подсветка диапазона ячеек цветом фона и цветом текста
+                   на заданное время с плавным затуханием
+        SetSelectedRow - 20. Выделение строки таблицы
     """
 
     # 3.16 Функции для работы с метками
