@@ -985,9 +985,17 @@ last_indexes = {}
 function qsfunctions.subs_to_candles(msg)
 	local ds, is_error = create_data_source(msg)
 	if not is_error then
+		-- Источник данных изначально приходит пустым. Нужно подождать пока он заполнится данными. Бесконечно ждать тоже нельзя. Вводим таймаут
+		local s = 0 -- Будем ждать 5 секунд, прежде чем вернем таймаут
+		repeat -- Ждем
+			sleep(100) -- 100 миллисекунд
+			s = s + 100 -- Запоминаем кол-во прошедших миллисекунд
+		until (ds:Size() > 0 or s > 5000) -- До тех пор, пока не придут данные или пока не наступит таймаут
+
 		local spl = msg.data
 		local class, sec, interval = spl[1], spl[2], spl[3]
 		local key = get_key(class, sec, interval)
+		log('Subscribe to '..key, 1)
 		data_sources[key] = ds
 		last_indexes[key] = ds:Size()
 		ds:SetUpdateCallback(
@@ -1026,10 +1034,20 @@ function qsfunctions.unsubs_from_candles(msg)
 	local spl = msg.data
 	local class, sec, interval = spl[1], spl[2], spl[3]
 	local key = get_key(class, sec, interval)
+	log('Unsubscribe from '..key, 1)
 	data_sources[key]:Close()
 	data_sources[key] = nil
 	last_indexes[key] = nil
 	return msg
+end
+
+function unsubs_all()
+	for key, _ in pairs(data_sources) do
+		log('Unsubscribe from '..key, 1)
+		data_sources[key]:Close()
+		data_sources[key] = nil
+		last_indexes[key] = nil
+	end
 end
 
 --- Проверить открыта ли подписка на заданный инструмент и интервал

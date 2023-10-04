@@ -11,16 +11,17 @@ end
 
 function OnQuikSharpDisconnected()
     -- TODO any recovery or risk management logic here
+    unsubs_all()
 end
 
 function OnError(message)
-	if is_connected then
-		local msg = {}
-		msg.t = timemsec()
-		msg.cmd = "lua_error"
-		msg.data = "Lua error: " .. message
-		sendCallback(msg)
-	end
+    if is_connected then
+        local msg = {}
+        msg.t = timemsec()
+        msg.cmd = "lua_error"
+        msg.data = "Lua error: " .. message
+        sendCallback(msg)
+    end
 end
 
 function OnDisconnected()
@@ -111,11 +112,10 @@ function OnStop(s)
     end
     log("QUIK# stopped. You could keep script running when closing QUIK and the script will start automatically the next time you start QUIK", 1)
     CleanUp()
-    --	send disconnect
+    --  send disconnect
     return 1000
 end
 
---TODO: if is_connected don't needed?
 function OnTrade(trade)
     local msg = {}
     msg.t = timemsec()
@@ -135,7 +135,7 @@ function OnTransReply(trans_reply)
 end
 
 function OnStopOrder(stop_order)
-	local msg = {}
+    local msg = {}
     msg.t = timemsec()
     msg.data = stop_order
     msg.cmd = "OnStopOrder"
@@ -146,9 +146,9 @@ function OnParam(class_code, sec_code)
     local msg = {}
     msg.cmd = "OnParam"
     msg.t = timemsec()
-	local dat = {}
-	dat.class_code = class_code
-	dat.sec_code = sec_code
+    local dat = {}
+    dat.class_code = class_code
+    dat.sec_code = sec_code
     msg.data = dat
     sendCallback(msg)
 end
