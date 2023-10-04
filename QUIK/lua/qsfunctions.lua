@@ -1072,13 +1072,4 @@ function qsfunctions.GetClientCodeByTrdAcc(msg)
     return msg
 end
 
--- isUcpClient doesn't exist
---- Функция предназначена для получения признака, указывающего имеет ли клиент единую денежную позицию
-function qsfunctions.IsUcpClient(msg)
-    local spl = msg.data
-    local firmId, client = spl[1], spl[2]
-    msg.data = isUcpClient(firmId, client)
-    return msg
-end
-
 return qsfunctions
