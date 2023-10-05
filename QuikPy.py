@@ -624,6 +624,10 @@ class QuikPy:
         """Код клиента фондового рынка с единой денежной позицией по торговому счету срочного рынка"""
         return self._process_request(trans_id, firm_id, trd_acc_id)
 
+    def IsUcpClient(self, firm_id: str, client, trans_id=0):  # 3
+        """Имеет ли клиент единую денежную позицию"""
+        return self._process_request(trans_id, firm_id, client)
+
     # Выход и закрытие
 
     def close_connection(self):
