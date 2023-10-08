@@ -14,14 +14,12 @@ function qsfunctions.dispatch_and_process(msg)
         if status then
             return result
         else
-            msg.cmd = "lua_error"
-            msg.lua_error = "Lua error: " .. result
+            msg.data = "Lua error: " .. result
             return msg
         end
     else
 		log(to_json(msg), 3)
-		msg.lua_error = "Command not implemented in Lua qsfunctions module: " .. msg.cmd
-        msg.cmd = "lua_error"
+		msg.data = "Command not implemented in Lua qsfunctions module: " .. msg.cmd
         return msg
     end
 end
@@ -35,7 +33,6 @@ end
 -- @return same msg table
 function qsfunctions.ping(msg)
     -- need to know data structure the caller gives
-    msg.t = 0 -- avoid time generation. Could also leave original
     if msg.data == "Ping" then
         msg.data = "Pong"
         return msg
@@ -69,8 +66,6 @@ end
 --- Функция предназначена для определения состояния подключения клиентского места к
 -- серверу. Возвращает «1», если клиентское место подключено и «0», если не подключено.
 function qsfunctions.isConnected(msg)
-    -- set time when function was called
-    msg.t = timemsec()
     msg.data = isConnected()
     return msg
 end
@@ -78,8 +73,6 @@ end
 --- Функция возвращает путь, по которому находится файл info.exe, исполняющий данный
 -- скрипт, без завершающего обратного слэша («\»). Например, C:\QuikFront.
 function qsfunctions.getWorkingFolder(msg)
-    -- set time when function was called
-    msg.t = timemsec()
     msg.data = getWorkingFolder()
     return msg
 end
@@ -87,8 +80,6 @@ end
 --- Функция возвращает путь, по которому находится запускаемый скрипт, без завершающего
 -- обратного слэша («\»). Например, C:\QuikFront\Scripts.
 function qsfunctions.getScriptPath(msg)
-    -- set time when function was called
-    msg.t = timemsec()
     msg.data = getScriptPath()
     return msg
 end
@@ -96,8 +87,6 @@ end
 --- Функция возвращает значения параметров информационного окна (пункт меню
 -- Связь / Информационное окно…).
 function qsfunctions.getInfoParam(msg)
-    -- set time when function was called
-    msg.t = timemsec()
     msg.data = getInfoParam(msg.data)
     return msg
 end
@@ -458,28 +447,21 @@ end
 -----------------------
 
 --- Функция предназначена для расчета максимально возможного количества лотов в заявке.
--- При заданном параметре is_market=true, необходимо передать параметр price=0, иначе будет рассчитано максимально возможное количество лотов в заявке по цене price.
+--   При заданном параметре is_market=true, необходимо передать параметр price=0,
+-- иначе будет рассчитано максимально возможное количество лотов в заявке по цене price.
 function qsfunctions.calc_buy_sell(msg)
-	local bs = CalcBuySell
     local spl = msg.data
-    local class_code, sec_code, clientCode, account, price, is_buy, is_market = spl[1], spl[2], spl[3], spl[4], spl[5], spl[6], spl[7]
-	if is_buy == "True" then
-		is_buy = true
-	else
-		is_buy = false
-	end
-	if is_market == "True" then
-		is_market = true
-	else
-		is_market = false
-	end
-    local qty, comiss = bs(class_code, sec_code, clientCode, account, price, is_buy, is_market)
+    local class_code, sec_code, clientCode = spl[1], spl[2], spl[3]
+    local account, price, is_buy, is_market = spl[4], spl[5], spl[6], spl[7]
+    
+    local cbs = CalcBuySell
+    local qty, comiss = cbs(class_code, sec_code, clientCode, account, price, is_buy, is_market)
     if qty ~= "" then
-        msg.data				= {}
-        msg.data.qty			= qty
-        msg.data.comission		= comiss
+        msg.data            = {}
+        msg.data.qty        = qty
+        msg.data.comission  = comiss
     else
-		message("Ошибка функции CalcBuySell", 1)
+        message("Ошибка функции CalcBuySell", 1)
     end
     return msg
 end
@@ -816,11 +798,31 @@ function qsfunctions.get_all_trades(msg)
 	msg.data = trades
 	return msg
 end
-
-
 --------------------------
+-- ‘Buy/Sell’ functions --
+--------------------------
+-- This functions returns a Lua table that contains parameters 
+-- from the ‘Buy/Sell’ QUIK table which indicate the possibility
+-- of buying or selling the specified instrument ‘sec_code’ of class
+-- ‘class_code’ by the client ‘client_code’ of the firm ‘firmid’ 
+-- at the price ‘price’. If the price is ‘0’, the best bid/offer values are used.
+function qsfunctions.getBuySellInfo(msg)
+	local spl = msg.data
+	local firm_id,  client_code, class_code, sec_code, price = spl[1], spl[2],spl[3], spl[4], spl[5]
+	msg.data = getBuySellInfo(firm_id,  client_code, class_code, sec_code, price)
+	return msg
+end
+
+-- function qsfunctions.getBuySellInfoEx(msg)
+-- 	local spl = msg.data
+-- 	local firm_id,  client_code, class_code, sec_code, price = spl[1], spl[2],spl[3], spl[4], spl[5]
+-- 	msg.data = getBuySellInfoEx(firm_id,  client_code, class_code, sec_code, price)
+-- 	return msg
+-- end
+
+---------------------------
 -- OptionBoard functions --
---------------------------
+---------------------------
 function qsfunctions.getOptionBoard(msg)
     local spl = msg.data
     local classCode, secCode = spl[1], spl[2]
@@ -1022,7 +1024,6 @@ function data_source_callback(index, class, sec, interval)
 		end
 
 		local msg = {}
-        msg.t = timemsec()
         msg.cmd = "OnNewCandle"
         msg.data = candle
         sendCallback(msg)
@@ -1090,7 +1091,6 @@ function qsfunctions.GetClientCodeByTrdAcc(msg)
     return msg
 end
 
--- isUcpClient doesn't exist
 --- Функция предназначена для получения признака, указывающего имеет ли клиент единую денежную позицию
 function qsfunctions.IsUcpClient(msg)
     local spl = msg.data
